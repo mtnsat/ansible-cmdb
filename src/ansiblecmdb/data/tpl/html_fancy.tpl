@@ -17,10 +17,10 @@ cols = [
   {"title": "Arch",       "id": "arch",       "func": col_arch,       "visible": False},
   {"title": "Virt",       "id": "virt",       "func": col_virt,       "visible": True},
   {"title": "CPU type",   "id": "cpu_type",   "func": col_cpu_type,   "visible": False},
-  {"title": "vCPUs",      "id": "cpus",       "func": col_cpus,       "visible": True},
+  {"title": "vCPUs",      "id": "vcpus",      "func": col_vcpus,      "visible": True},
   {"title": "RAM [GiB]",  "id": "ram",        "func": col_ram,        "visible": True},
-  {"title": "Mem Usage",  "id": "mem",        "func": col_mem,        "visible": False},
-  {"title": "Swap Usage", "id": "swap",       "func": col_swap,       "visible": False},
+  {"title": "Mem Usage",  "id": "mem_usage",  "func": col_mem_usage,  "visible": False},
+  {"title": "Swap Usage", "id": "swap_usage", "func": col_swap_usage, "visible": False},
   {"title": "Disk usage", "id": "disk_usage", "func": col_disk_usage, "visible": False},
   {"title": "Timestamp",  "id": "timestamp",  "func": col_gathered,   "visible": False},
 ]
@@ -73,36 +73,40 @@ if columns is not None:
   ${ cpu_type[-1] }
   % endif
 </%def>
-<%def name="col_cpus(host)">
-  ${host['ansible_facts'].get('ansible_processor_vcpus', 0)}
+<%def name="col_vcpus(host)">
+  ${host['ansible_facts'].get('ansible_processor_vcpus', host['ansible_facts'].get('ansible_processor_cores', 0))}
 </%def>
 <%def name="col_ram(host)">
   ${'%0.1f' % ((int(host['ansible_facts'].get('ansible_memtotal_mb', 0)) / 1024.0))}
 </%def>
-<%def name="col_mem(host)">
+<%def name="col_mem_usage(host)">
   <% i = host['ansible_facts'].get('ansible_memory_mb') %>
   % if i is not None:
-  <div class="bar">
-    ## hidden sort helper
-    <span style="display:none">${'%f' % (float(i["nocache"]["used"]) / i["real"]["total"])}</span>
-    <span class="prog_bar_full" style="width:100px">
-      <span class="prog_bar_used" style="width:${float(i["nocache"]["used"]) / i["real"]["total"] * 100}px"></span>
-    </span>
-    <span class="usage_detail">(${round((i["nocache"]["used"]) / 1024.0, 1)} / ${round(i["real"]["total"] / 1024.0, 1)} GiB)</span>
-  </div>
+    <div class="bar">
+      ## hidden sort helper
+      <span style="display:none">${'%f' % (float(i["nocache"]["used"]) / i["real"]["total"])}</span>
+      <span class="prog_bar_full" style="width:100px">
+        <span class="prog_bar_used" style="width:${float(i["nocache"]["used"]) / i["real"]["total"] * 100}px"></span>
+      </span>
+      <span class="usage_detail">(${round((i["nocache"]["used"]) / 1024.0, 1)} / ${round(i["real"]["total"] / 1024.0, 1)} GiB)</span>
+    </div>
+  % else:
+    n/a
   % endif
 </%def>
-<%def name="col_swap(host)">
+<%def name="col_swap_usage(host)">
   <% i = host['ansible_facts'].get('ansible_memory_mb') %>
   % if i is not None and i["swap"]["total"] > 0:
-  <div class="bar">
-    ## hidden sort helper
-    <span style="display:none">${'%f' % (float(i["swap"]["used"]) / i["swap"]["total"])}</span>
-    <span class="prog_bar_full" style="width:100px">
-      <span class="prog_bar_used" style="width:${float(i["swap"]["used"]) / i["swap"]["total"] * 100}px"></span>
-    </span>
-    <span class="usage_detail">(${round((i["swap"]["used"]) / 1024.0, 1)} / ${round(i["swap"]["total"] / 1024.0, 1)} GiB)</span>
-  </div>
+    <div class="bar">
+      ## hidden sort helper
+      <span style="display:none">${'%f' % (float(i["swap"]["used"]) / i["swap"]["total"])}</span>
+      <span class="prog_bar_full" style="width:100px">
+        <span class="prog_bar_used" style="width:${float(i["swap"]["used"]) / i["swap"]["total"] * 100}px"></span>
+      </span>
+      <span class="usage_detail">(${round((i["swap"]["used"]) / 1024.0, 1)} / ${round(i["swap"]["total"] / 1024.0, 1)} GiB)</span>
+    </div>
+  % else:
+    n/a
   % endif
 </%def>
 <%def name="col_disk_usage(host)">
@@ -320,6 +324,7 @@ if columns is not None:
 %>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>Ansible overview</title>
   <style type="text/css">
     /* reset.css */
@@ -381,6 +386,7 @@ if columns is not None:
     #host_overview tbody a { text-decoration: none; color: #005c9d; }
     #host_overview_tbl_filter { float: right; font-size: small; color: #808080; }
     #host_overview_tbl_filter label input { margin-left: 12px; }
+    #host_overview_tbl_filter #filter_link a { color: #000000; }
     #host_overview_tbl_info { font-size: x-small; margin-top: 16px; color: #C0C0C0; }
     #host_overview .bar { clear: both; }
     #host_overview .prog_bar_full { float: left; display: block; height: 12px; border: 1px solid #000000; padding: 1px; margin-right: 4px; color: white; text-align: center; }
@@ -389,6 +395,7 @@ if columns is not None:
     #host_overview span.usage_detail { font-size: x-small; color: #606060; }
 
     #hosts { margin-left: 32px; margin-bottom: 120px; }
+    #hosts a { color: #000000; }
     #hosts h3 { margin-top: 128px; padding-bottom: 16px; font-size: xx-large; border-bottom: 1px solid #D0D0D0; }
     #hosts h4 { font-size: large; font-weight: bold; color: #404040; margin-top: 32px; margin-bottom: 32px; }
     #hosts th { text-align: left; color: #909090; padding-bottom: 10px; }
@@ -461,14 +468,13 @@ if columns is not None:
 
 <div id="hosts">
   % for hostname, host in hosts.items():
+    <a href="#${host['name']}" name="${host['name']}"><h3 id="${host['name']}">${host['name']}</h3></a>
     % if 'ansible_facts' not in host:
-      <a name="${host['name']}"><h3 id="${host['name']}">${host['name']}</h3></a>
       <p>No host information collected</p>
       % if 'msg' in host:
         <p class="error">${host['msg']}</p>
       % endif
     % else:
-      <a name="${host['name']}"><h3 id="${host['name']}">${host['name']}</h3></a>
       <% host_general(host) %>
       <% host_groups(host) %>
       <% host_custvars(host) %>
@@ -485,6 +491,17 @@ if columns is not None:
 </footer>
 
 <script>
+function getQueryParams(qs) {
+  qs = qs.split('+').join(' ');
+  var params = {},
+    tokens,
+    re = /[?&]?([^=]+)=([^&]*)/g;
+  while (tokens = re.exec(qs)) {
+    params[decodeURIComponent(tokens[1])] = decodeURIComponent(tokens[2]);
+  }
+  return params;
+}
+
 $(document).ready( function () {
   // Initialize the DataTables jQuery plugin on the host overview table
   var table = $('#host_overview_tbl').DataTable({
@@ -497,9 +514,24 @@ $(document).ready( function () {
     "fnInitComplete": function() {
       // Focus the input field
       $("#host_overview_tbl_filter input").focus();
+
+      // Set the search box value to the query string 'search' part
+      var qp = getQueryParams(document.location.search);
+      if ("search" in qp) {
+        $("#host_overview_tbl_filter input").val(qp.search);
+        this.fnFilter(qp.search);
+      }
     }
 
   });
+  table.on( 'search.dt', function () {
+    // Show a direct link to the search term
+    $('#filter_link').remove();
+    if (table.search() == "") {
+    } else {
+      $('#host_overview_tbl_filter label').after(' <span id="filter_link"><a title="Direct link to search" href="?search='+table.search()+'">&#x2605;</a></span>');
+    }
+  } );
 
   // Show and hide columns on button clicks
   $('a.col-toggle').on('click', function(e) {

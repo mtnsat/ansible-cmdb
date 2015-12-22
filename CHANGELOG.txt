@@ -1,3 +1,27 @@
+v1.10   2015-12-21
+
+- html_fancy: Headers are now links
+- html_fancy: Search box can now be linked to using the ?search= param, which
+  will automatically filter the results when the page is loaded. 
+- html_fancy: A star with a link now appears next to the search box for easy
+  copy-pasting of the search box URL.
+- UTF-8 / unicode bugfixes.
+
+v1.9    2015-12-05 (Happy Sinterklaas)
+
+- Always output UTF-8.
+- Added the 'json' template, which dumps the entire inventory including
+  variables and groups in JSON format.
+- Included a manual page in the packages.
+- The -t/--template switch can now point to an actual filename, and no longer
+  requires the .tpl extension to be stripped.
+- html_fancy: Fixed a bug where the search field was not properly focussed.
+- html_fancy: Use vcpus for cores + hyperthreading count (Rowin Andruscavage)
+- html_fancy: New cpu, memory, swap columns and improved sorting (Rowin Andruscavage)
+- html_fancy: Show a hosts groups in the detailed view
+- html_fancy: Move and disable/enable some default columns.
+- html_fancy: Network overview table for host details.
+
 v1.8    2015-11-10
 
 - Fixed a bug in Dynamic Inventory parsing
