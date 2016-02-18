@@ -50,13 +50,32 @@ if columns is not None:
   ${host['ansible_facts'].get('ansible_fqdn', '')}
 </%def>
 <%def name="col_main_ip(host)">
-  ${host['ansible_facts'].get('ansible_default_ipv4', {}).get('address', '')}
+  <%
+    default_ipv4 = ''
+    if host['ansible_facts'].get('ansible_os_family', '') == 'Windows':
+      ipv4_addresses = [ip for ip in host['ansible_facts'].get('ansible_ip_addresses', []) if ':' not in ip]
+      if ipv4_addresses:
+        default_ipv4 = ipv4_addresses[0]
+    else:
+      default_ipv4 = host['ansible_facts'].get('ansible_default_ipv4', {}).get('address', '')
+  %>
+  ${default_ipv4}
 </%def>
 <%def name="col_all_ip(host)">
-  ${'<br>'.join(host['ansible_facts'].get('ansible_all_ipv4_addresses', []))}
+  <%
+    if host['ansible_facts'].get('ansible_os_family', '') == 'Windows':
+      ipv4_addresses = [ip for ip in host['ansible_facts'].get('ansible_ip_addresses', []) if ':' not in ip]
+    else:
+      ipv4_addresses = host['ansible_facts'].get('ansible_all_ipv4_addresses', [])
+  %>
+  ${'<br>'.join(ipv4_addresses)}
 </%def>
 <%def name="col_os(host)">
-  ${host['ansible_facts'].get('ansible_distribution', '')} ${host['ansible_facts'].get('ansible_distribution_version', '')}
+  % if host['ansible_facts'].get('ansible_distribution', '') in ["OpenBSD"]:
+    ${host['ansible_facts'].get('ansible_distribution', '')} ${host['ansible_facts'].get('ansible_distribution_release', '')}
+  % else:
+    ${host['ansible_facts'].get('ansible_distribution', '')} ${host['ansible_facts'].get('ansible_distribution_version', '')}
+  % endif
 </%def>
 <%def name="col_kernel(host)">
   ${host['ansible_facts'].get('ansible_kernel', '')}
@@ -65,12 +84,12 @@ if columns is not None:
   ${host['ansible_facts'].get('ansible_architecture', '')} / ${host['ansible_facts'].get('ansible_userspace_architecture', '')}
 </%def>
 <%def name="col_virt(host)">
-  ${host['ansible_facts'].get('ansible_virtualization_type', '')} / ${host['ansible_facts'].get('ansible_virtualization_role', '')}
+  ${host['ansible_facts'].get('ansible_virtualization_type', '?')} / ${host['ansible_facts'].get('ansible_virtualization_role', '?')}
 </%def>
 <%def name="col_cpu_type(host)">
   <% cpu_type = host['ansible_facts'].get('ansible_processor', 0)%>
   % if isinstance(cpu_type, list):
-  ${ cpu_type[-1] }
+    ${ cpu_type[-1] }
   % endif
 </%def>
 <%def name="col_vcpus(host)">
@@ -80,53 +99,69 @@ if columns is not None:
   ${'%0.1f' % ((int(host['ansible_facts'].get('ansible_memtotal_mb', 0)) / 1024.0))}
 </%def>
 <%def name="col_mem_usage(host)">
-  <% i = host['ansible_facts'].get('ansible_memory_mb') %>
-  % if i is not None:
+  % try:
+    <%
+    i = host['ansible_facts'].get('ansible_memory_mb') 
+    sort_used = '%f' % (float(i["nocache"]["used"]) / i["real"]["total"])
+    used = float(i["nocache"]["used"]) / i["real"]["total"] * 100
+    detail_used = round((i["nocache"]["used"]) / 1024.0, 1)
+    detail_total = round(i["real"]["total"] / 1024.0, 1)
+    %>
     <div class="bar">
       ## hidden sort helper
-      <span style="display:none">${'%f' % (float(i["nocache"]["used"]) / i["real"]["total"])}</span>
+      <span style="display:none">${sort_used}</span>
       <span class="prog_bar_full" style="width:100px">
-        <span class="prog_bar_used" style="width:${float(i["nocache"]["used"]) / i["real"]["total"] * 100}px"></span>
+        <span class="prog_bar_used" style="width:${used}px"></span>
       </span>
-      <span class="usage_detail">(${round((i["nocache"]["used"]) / 1024.0, 1)} / ${round(i["real"]["total"] / 1024.0, 1)} GiB)</span>
+      <span class="usage_detail">(${detail_used} / ${detail_total} GiB)</span>
     </div>
-  % else:
+  % except:
     n/a
-  % endif
+  % endtry
 </%def>
 <%def name="col_swap_usage(host)">
-  <% i = host['ansible_facts'].get('ansible_memory_mb') %>
-  % if i is not None and i["swap"]["total"] > 0:
+  % try:
+    <%
+      i = host['ansible_facts'].get('ansible_memory_mb')
+      sort_used = '%f' % (float(i["swap"]["used"]) / i["swap"]["total"])
+      used = float(i["swap"]["used"]) / i["swap"]["total"] * 100
+      detail_used = round((i["swap"]["used"]) / 1024.0, 1)
+      detail_total = round(i["swap"]["total"] / 1024.0, 1)
+    %>
     <div class="bar">
       ## hidden sort helper
-      <span style="display:none">${'%f' % (float(i["swap"]["used"]) / i["swap"]["total"])}</span>
+      <span style="display:none">${sort_used}</span>
       <span class="prog_bar_full" style="width:100px">
-        <span class="prog_bar_used" style="width:${float(i["swap"]["used"]) / i["swap"]["total"] * 100}px"></span>
+        <span class="prog_bar_used" style="width:${used}px"></span>
       </span>
-      <span class="usage_detail">(${round((i["swap"]["used"]) / 1024.0, 1)} / ${round(i["swap"]["total"] / 1024.0, 1)} GiB)</span>
+      <span class="usage_detail">(${detail_used} / ${detail_total} GiB)</span>
     </div>
-  % else:
+  % except:
     n/a
-  % endif
+  % endtry
 </%def>
 <%def name="col_disk_usage(host)">
   % for i in host['ansible_facts'].get('ansible_mounts', []):
-    % if 'size_total' in i:  # Solaris hosts have no size_total
-      % if i['size_total'] > 1:
-        ## hidden sort helper
-        <span style="display:none">${'%f' % (float((i["size_total"] - i["size_available"])) / i["size_total"])}</span>
-        <div class="bar">
-          <span class="prog_bar_full" style="width:100px">
-            <span class="prog_bar_used" style="width:${float((i["size_total"] - i["size_available"])) / i["size_total"] * 100}px"></span>
-          </span> ${i['mount']} <span class="usage_detail">(${round((i['size_total'] - i['size_available']) / 1073741824.0, 1)} / ${round(i['size_total'] / 1073741824.0, 1)} GiB)</span>
-        </div>
-      % endif
-    % else:
+    % try:
+      <%
+        sort_used = '%f' % (float((i["size_total"] - i["size_available"])) / i["size_total"])
+        used = float((i["size_total"] - i["size_available"])) / i["size_total"] * 100
+        detail_used = round((i['size_total'] - i['size_available']) / 1073741824.0, 1)
+        detail_total = round(i['size_total'] / 1073741824.0, 1)
+      %>
+      ## hidden sort helper
+      <span style="display:none">${sort_used}</span>
+      <div class="bar">
+        <span class="prog_bar_full" style="width:100px">
+          <span class="prog_bar_used" style="width:${used}px"></span>
+        </span> ${i['mount']} <span class="usage_detail">(${detail_used} / ${detail_total} GiB)</span>
+      </div>
+    % except:
       n/a
       <%
-      break  # Don't list any more disks since no 'size_total' is available.
+      break  ## Stop listing disks, since there was an error.
       %>
-    % endif
+    % endtry
   % endfor
 </%def>
 <%def name="col_comment(host)">
@@ -168,6 +203,10 @@ if columns is not None:
         <tr><th>${var_name}</th><td>${var_value}</td></tr>
       % endfor
   </table>
+</%def>
+<%def name="host_localfacts(host)">
+  <h4>Host local facts</h4>
+  ${r_dict(host['ansible_facts'].get('ansible_local', {}))}
 </%def>
 <%def name="host_hardware(host)">
   <h4>Hardware</h4>
@@ -212,34 +251,36 @@ if columns is not None:
     <tr><th>FQDN</th><td>${host['ansible_facts'].get('ansible_fqdn', '')}</td></tr>
     <tr><th>All IPv4</th><td>${'<br>'.join(host['ansible_facts'].get('ansible_all_ipv4_addresses', []))}</td></tr>
   </table>
-  <table class="net_overview">
-    <tr>
-      <th>IPv4 Networks</th>
-      <td>
-        <table class="net_overview">
-          <tr>
-            <th>dev</th>
-            <th>address</th>
-            <th>network</th>
-            <th>netmask</th>
-          </tr>
-          % for iface_name in sorted(host['ansible_facts'].get('ansible_interfaces', [])):
-            <% iface = host['ansible_facts'].get('ansible_' + iface_name, {}) %>
-            % for net in [iface.get('ipv4', {})] + iface.get('ipv4_secondaries', []):
-              % if 'address' in net:
-                <tr>
-                  <td>${iface_name}</td>
-                  <td>${net['address']}</td>
-                  <td>${net['network']}</td>
-                  <td>${net['netmask']}</td>
-                </tr>
-              % endif
+  % if host['ansible_facts'].get('ansible_os_family', '') != "Windows":
+    <table class="net_overview">
+      <tr>
+        <th>IPv4 Networks</th>
+        <td>
+          <table class="net_overview">
+            <tr>
+              <th>dev</th>
+              <th>address</th>
+              <th>network</th>
+              <th>netmask</th>
+            </tr>
+            % for iface_name in sorted(host['ansible_facts'].get('ansible_interfaces', [])):
+              <% iface = host['ansible_facts'].get('ansible_' + iface_name, {}) %>
+              % for net in [iface.get('ipv4', {})] + iface.get('ipv4_secondaries', []):
+                % if 'address' in net:
+                  <tr>
+                    <td>${iface_name}</td>
+                    <td>${net['address']}</td>
+                    <td>${net['network']}</td>
+                    <td>${net['netmask']}</td>
+                  </tr>
+                % endif
+              % endfor
             % endfor
-          % endfor
-        </table>
-      </td>
-    </tr>
-  </table>
+          </table>
+        </td>
+      </tr>
+    </table>
+  % endif
   <table class="net_iface_details">
     <tr>
       <th>Interface details</th>
@@ -268,7 +309,11 @@ if columns is not None:
     <tr>
       <th>Devices</th>
       <td>
-        ${r_dict(host['ansible_facts'].get('ansible_devices', {}))}
+        % if type(host['ansible_facts'].get('ansible_devices')) == list:
+          ${r_list(host['ansible_facts'].get('ansible_devices', []))}
+        % else:
+          ${r_dict(host['ansible_facts'].get('ansible_devices', {}))}
+        % endif
       </td>
     </tr>
     <tr>
@@ -386,7 +431,7 @@ if columns is not None:
     #host_overview tbody a { text-decoration: none; color: #005c9d; }
     #host_overview_tbl_filter { float: right; font-size: small; color: #808080; }
     #host_overview_tbl_filter label input { margin-left: 12px; }
-    #host_overview_tbl_filter #filter_link a { color: #000000; }
+    #host_overview_tbl_filter #filter_link a { color: #000000; background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoUlEQVR4Xu2TIQ6EMBBF/+4dOUBFBYoboBHoBsuRUCgcnpDg3/Y7ICQVK3ebvPxJ30xH9QXom/PO/PoDAjSOY8pwIwFFr2EYUobjONj33bjGd3Ylr77v2bYNp7Hwhifs3HOeUdu2LMuCE1DXdedtl612cJ1R0zRM04TT1HVNjPERO/ecZxRCSBnmeWZdV+Ma39mVvABVVZUy3EhA0f//gvQB4y08WIiD/goAAAAASUVORK5CYII=) no-repeat left center; padding: 5px 0 5px 25px; }
     #host_overview_tbl_info { font-size: x-small; margin-top: 16px; color: #C0C0C0; }
     #host_overview .bar { clear: both; }
     #host_overview .prog_bar_full { float: left; display: block; height: 12px; border: 1px solid #000000; padding: 1px; margin-right: 4px; color: white; text-align: center; }
@@ -448,6 +493,9 @@ if columns is not None:
     </thead>
     <tbody>
       % for hostname, host in hosts.items():
+        <%
+        log.debug("Rendering host overview for {0}".format(hostname))
+        %>
         <tr>
           % if 'ansible_facts' not in host:
             <td class="error">${col_name(host)}</td>
@@ -468,6 +516,9 @@ if columns is not None:
 
 <div id="hosts">
   % for hostname, host in hosts.items():
+    <%
+    log.debug("Rendering host details for {0}".format(hostname))
+    %>
     <a href="#${host['name']}" name="${host['name']}"><h3 id="${host['name']}">${host['name']}</h3></a>
     % if 'ansible_facts' not in host:
       <p>No host information collected</p>
@@ -478,6 +529,7 @@ if columns is not None:
       <% host_general(host) %>
       <% host_groups(host) %>
       <% host_custvars(host) %>
+      <% host_localfacts(host) %>
       <% host_hardware(host) %>
       <% host_os(host) %>
       <% host_network(host) %>
@@ -529,7 +581,7 @@ $(document).ready( function () {
     $('#filter_link').remove();
     if (table.search() == "") {
     } else {
-      $('#host_overview_tbl_filter label').after(' <span id="filter_link"><a title="Direct link to search" href="?search='+table.search()+'">&#x2605;</a></span>');
+      $('#host_overview_tbl_filter label').after('&nbsp; <span id="filter_link"><a title="Direct link to search" href="?search='+table.search()+'">&nbsp;</a></span>');
     }
   } );
 

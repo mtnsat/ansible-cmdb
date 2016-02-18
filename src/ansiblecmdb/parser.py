@@ -1,11 +1,16 @@
 import sys
 import re
 import json
+import traceback
 if sys.version_info[0] == 2:
     # Python 2.x shlex doesn't support unicode
     import ushlex as shlex
 else:
     import shlex
+try:
+    import yaml
+except ImportError as err:
+    import yaml3 as yaml
 
 
 class HostsParser(object):
@@ -39,9 +44,10 @@ class HostsParser(object):
                 self._apply_section(section, self.hosts)
             for section in filter(lambda s: s['type'] == 'hosts', self.sections):
                 self._apply_section(section, self.hosts)
-        except ValueError as e:
+        except ValueError as err:
+            tb = traceback.format_exc()
             sys.stderr.write("Error while parsing hosts contents: '{}'\n"
-                             "Invalid hosts file?\n".format(str(e)))
+                             "Invalid hosts file?\n".format(tb))
 
 
     def _parse_hosts_contents(self, hosts_contents):
@@ -125,20 +131,64 @@ class HostsParser(object):
     def _parse_line_entry(self, line, type):
         """
         Parse a section entry line into its components. In case of a 'vars'
-        section, the first field will be None.
+        section, the first field will be None. Otherwise, the first field will
+        be the unexpanded host or group name the variables apply to.
 
         For example:
             [production:children]
-            frontend  purpose="web"
+            frontend  purpose="web"    # The line we process
         Returns:
             ('frontend', {'purpose': 'web'})
+
+        For example:
+            [production:vars]
+            purpose="web"              # The line we process
+        Returns:
+            (None, {'purpose': 'web'})
+
+        Undocumented feature:
+            [prod:vars]
+            json_like_vars=[{'name': 'htpasswd_auth'}]
+        Returns:
+            (None, {'name': 'htpasswd_auth'})
         """
-        tokens = shlex.split(line.strip())
+
         name = None
-        if type != 'vars':
+        key_values = {}
+
+        if type == 'vars':
+            key_values = self._parse_line_vars(line)
+        else:
+            tokens = shlex.split(line.strip())
             name = tokens.pop(0)
-        key_values = self._parse_vars(tokens)
+            key_values = self._parse_vars(tokens)
         return (name, key_values)
+
+    def _parse_line_vars(self, line):
+        """
+        Parse a line in a [XXXXX:vars] section.
+        """
+        key_values = {}
+
+        # Undocumented feature allows json in vars sections like so:
+        #   [prod:vars]
+        #   json_like_vars=[{'name': 'htpasswd_auth'}]
+        # We'll try this first. If it fails, we'll fall back to normal var
+        # lines. Since it's undocumented, we just assume some things.
+        k, v = line.strip().split('=', 1)
+        if v.startswith('['):
+            try:
+                list_res = yaml.load(v)
+                if isinstance(list_res[0], dict):
+                    key_values = list_res[0]
+                    return key_values
+            except ValueError:
+                pass
+
+        # Guess it's not YAML. Parse as normal host variables
+        tokens = shlex.split(line.strip())
+        key_values = self._parse_vars(tokens)
+        return key_values
 
     def _parse_vars(self, tokens):
         """
