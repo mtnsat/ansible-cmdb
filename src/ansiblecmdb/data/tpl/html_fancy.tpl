@@ -4,25 +4,25 @@
 ##
 import datetime
 cols = [
-  {"title": "Name",       "id": "name",       "func": col_name,       "visible": True},
-  {"title": "Groups",     "id": "groups",     "func": col_groups,     "visible": False},
-  {"title": "DTAP",       "id": "dtap",       "func": col_dtap,       "visible": False},
-  {"title": "Comment",    "id": "comment",    "func": col_comment,    "visible": False},
-  {"title": "Ext ID",     "id": "ext_id",     "func": col_ext_id,     "visible": False},
-  {"title": "FQDN",       "id": "fqdn",       "func": col_fqdn,       "visible": True},
-  {"title": "Main IP",    "id": "main_ip",    "func": col_main_ip,    "visible": True},
-  {"title": "All IPv4",   "id": "all_ipv4",   "func": col_all_ip,     "visible": False},
-  {"title": "OS",         "id": "os",         "func": col_os,         "visible": True},
-  {"title": "Kernel",     "id": "kernel",     "func": col_kernel,     "visible": False},
-  {"title": "Arch",       "id": "arch",       "func": col_arch,       "visible": False},
-  {"title": "Virt",       "id": "virt",       "func": col_virt,       "visible": True},
-  {"title": "CPU type",   "id": "cpu_type",   "func": col_cpu_type,   "visible": False},
-  {"title": "vCPUs",      "id": "vcpus",      "func": col_vcpus,      "visible": True},
-  {"title": "RAM [GiB]",  "id": "ram",        "func": col_ram,        "visible": True},
-  {"title": "Mem Usage",  "id": "mem_usage",  "func": col_mem_usage,  "visible": False},
-  {"title": "Swap Usage", "id": "swap_usage", "func": col_swap_usage, "visible": False},
-  {"title": "Disk usage", "id": "disk_usage", "func": col_disk_usage, "visible": False},
-  {"title": "Timestamp",  "id": "timestamp",  "func": col_gathered,   "visible": False},
+  {"title": "Name",       "id": "name",       "func": col_name,       "sType": "string", "visible": True},
+  {"title": "Groups",     "id": "groups",     "func": col_groups,     "sType": "string", "visible": False},
+  {"title": "DTAP",       "id": "dtap",       "func": col_dtap,       "sType": "string", "visible": False},
+  {"title": "Comment",    "id": "comment",    "func": col_comment,    "sType": "string", "visible": False},
+  {"title": "Ext ID",     "id": "ext_id",     "func": col_ext_id,     "sType": "string", "visible": False},
+  {"title": "FQDN",       "id": "fqdn",       "func": col_fqdn,       "sType": "string", "visible": True},
+  {"title": "Main IP",    "id": "main_ip",    "func": col_main_ip,    "sType": "string", "visible": True},
+  {"title": "All IPv4",   "id": "all_ipv4",   "func": col_all_ip,     "sType": "string", "visible": False},
+  {"title": "OS",         "id": "os",         "func": col_os,         "sType": "string", "visible": True},
+  {"title": "Kernel",     "id": "kernel",     "func": col_kernel,     "sType": "string", "visible": False},
+  {"title": "Arch",       "id": "arch",       "func": col_arch,       "sType": "string", "visible": False},
+  {"title": "Virt",       "id": "virt",       "func": col_virt,       "sType": "string", "visible": True},
+  {"title": "CPU type",   "id": "cpu_type",   "func": col_cpu_type,   "sType": "string", "visible": False},
+  {"title": "vCPUs",      "id": "vcpus",      "func": col_vcpus,      "sType": "num", "visible": True},
+  {"title": "RAM [GiB]",  "id": "ram",        "func": col_ram,        "sType": "num", "visible": True},
+  {"title": "Mem Usage",  "id": "mem_usage",  "func": col_mem_usage,  "sType": "string", "visible": False},
+  {"title": "Swap Usage", "id": "swap_usage", "func": col_swap_usage, "sType": "string", "visible": False},
+  {"title": "Disk usage", "id": "disk_usage", "func": col_disk_usage, "sType": "string", "visible": False},
+  {"title": "Timestamp",  "id": "timestamp",  "func": col_gathered,   "sType": "string", "visible": False},
 ]
 
 # Enable columns specified with '--columns'
@@ -88,12 +88,16 @@ if columns is not None:
 </%def>
 <%def name="col_cpu_type(host)">
   <% cpu_type = host['ansible_facts'].get('ansible_processor', 0)%>
-  % if isinstance(cpu_type, list):
+  % if isinstance(cpu_type, list) and len(cpu_type) > 0:
     ${ cpu_type[-1] }
   % endif
 </%def>
 <%def name="col_vcpus(host)">
-  ${host['ansible_facts'].get('ansible_processor_vcpus', host['ansible_facts'].get('ansible_processor_cores', 0))}
+  % if host['ansible_facts'].get('ansible_distribution', '') in ["OpenBSD"]:
+    0
+  % else:
+    ${host['ansible_facts'].get('ansible_processor_vcpus', host['ansible_facts'].get('ansible_processor_cores', 0))}
+  % endif
 </%def>
 <%def name="col_ram(host)">
   ${'%0.1f' % ((int(host['ansible_facts'].get('ansible_memtotal_mb', 0)) / 1024.0))}
@@ -184,29 +188,62 @@ if columns is not None:
   <table>
     <tr><th>Node name</th><td>${host['ansible_facts'].get('ansible_nodename', '')}</td></tr>
     <tr><th>Form factor</th><td>${host['ansible_facts'].get('ansible_form_factor', '')}</td></tr>
-    <tr><th>Virtualisation role</th><td>${host['ansible_facts'].get('ansible_virtualization_role', '')}</td></tr>
-    <tr><th>Virtualisation type</th><td>${host['ansible_facts'].get('ansible_virtualization_type', '')}</td></tr>
+    <tr><th>Virtualization role</th><td>${host['ansible_facts'].get('ansible_virtualization_role', '')}</td></tr>
+    <tr><th>Virtualization type</th><td>${host['ansible_facts'].get('ansible_virtualization_type', '')}</td></tr>
   </table>
 </%def>
 <%def name="host_groups(host)">
-  <h4>Groups</h4>
-  <ul>
-    % for group in sorted(host.get('groups', [])):
-      <li>${group}</li>
-    % endfor
-  </ul>
+  % if len(host.get('groups', [])) != 0:
+    <h4>Groups</h4>
+    <ul>
+      % for group in sorted(host.get('groups', [])):
+        <li>${group}</li>
+      % endfor
+    </ul>
+  % endif
 </%def>
 <%def name="host_custvars(host)">
-  <h4>Custom variables</h4>
-  <table>
-      % for var_name, var_value in host['hostvars'].items():
-        <tr><th>${var_name}</th><td>${var_value}</td></tr>
-      % endfor
-  </table>
+  % if len(host['hostvars']) != 0:
+    <h4>Custom variables</h4>
+    <table>
+        % for var_name, var_value in host['hostvars'].items():
+          <tr>
+            <th>${var_name}</th>
+            <td>
+              % if type(var_value) == dict:
+                ${r_dict(var_value)}
+              % elif type(var_value) == list:
+                ${r_list(var_value)}
+              % else:
+                ${var_value}
+              % endif
+        % endfor
+    </table>
+  % endif
 </%def>
 <%def name="host_localfacts(host)">
-  <h4>Host local facts</h4>
-  ${r_dict(host['ansible_facts'].get('ansible_local', {}))}
+  % if len(host['ansible_facts'].get('ansible_local', {}).items()) != 0:
+    <h4>Host local facts</h4>
+    ${r_dict(host['ansible_facts'].get('ansible_local', {}))}
+  % endif
+</%def>
+<%def name="host_factorfacts(host)">
+  <%
+  facter_facts = {}
+  for key, value in host['ansible_facts'].items():
+    if key.startswith('facter_'):
+      facter_facts[key] = value
+  %>
+  % if len(facter_facts) != 0:
+    <h4>Facter facts</h4>
+    ${r_dict(facter_facts)}
+  % endif
+</%def>
+<%def name="host_customfacts(host)">
+  % if len(host.get('custom_facts', {}).items()) != 0:
+    <h4>Custom facts</h4>
+    ${r_dict(host['custom_facts'])}
+  % endif
 </%def>
 <%def name="host_hardware(host)">
   <h4>Hardware</h4>
@@ -215,6 +252,9 @@ if columns is not None:
     <tr><th>Product name</th><td>${host['ansible_facts'].get('ansible_product_name', '')}</td></tr>
     <tr><th>Product serial</th><td>${host['ansible_facts'].get('ansible_product_serial', '')}</td></tr>
     <tr><th>Architecture</th><td>${host['ansible_facts'].get('ansible_architecture', '')}</td></tr>
+    <tr><th>Form factor</th><td>${host['ansible_facts'].get('ansible_form_factor', '')}</td></tr>
+    <tr><th>Virtualization role</th><td>${host['ansible_facts'].get('ansible_virtualization_role', '')}</td></tr>
+    <tr><th>Virtualization type</th><td>${host['ansible_facts'].get('ansible_virtualization_type', '')}</td></tr>
     <tr><th>Machine</th><td>${host['ansible_facts'].get('ansible_machine', '')}</td></tr>
     <tr><th>Processor count</th><td>${host['ansible_facts'].get('ansible_processor_count', '')}</td></tr>
     <tr><th>Processor cores</th><td>${host['ansible_facts'].get('ansible_processor_cores', '')}</td></tr>
@@ -416,7 +456,7 @@ if columns is not None:
     #col_toggles h2 { display: block; margin-bottom: 32px; color: #606060; }
     #col_toggle_buttons { margin-left: 32px; font-weight: normal; line-height: 40px; }
     #col_toggles a { line-height: 40px; }
-    #col_toggles a { display: inline-block; background-color: #009688; line-height: 32px; padding: 0px 15px 0px 15px; margin-right: 6px; font-size: small; box-shadow: 2px 2px 0px 0px rgba(0,0,0,0.35); color: #FFFFFF; }
+    #col_toggles a { display: inline-block; background-color: #009688; line-height: 32px; padding: 0px 15px 0px 15px; margin-right: 6px; box-shadow: 2px 2px 0px 0px rgba(0,0,0,0.35); color: #FFFFFF; }
     #col_toggles a.col-invisible { background-color: #B0B0B0; box-shadow: 0 0px 0px 0; }
 
     #host_overview { margin: 32px; }
@@ -424,20 +464,20 @@ if columns is not None:
     #host_overview table { width: 100%; clear: both; }
     #host_overview tr { border-bottom: 1px solid #F0F0F0; }
     #host_overview tr:hover { background-color: #F0F0F0; }
-    #host_overview thead th { text-align: left; color: #707070; font-size: x-small; font-weight: bold; cursor: pointer; background-repeat: no-repeat; background-position: center right; background-image: url("${res_url}/images/sort_both.png"); }
+    #host_overview thead th { text-align: left; color: #707070; font-weight: bold; cursor: pointer; background-repeat: no-repeat; background-position: center right; background-image: url("${res_url}/images/sort_both.png"); }
     #host_overview thead th.sorting_desc { background-image: url("${res_url}/images/sort_desc.png"); }
     #host_overview thead th.sorting_asc { background-image: url("${res_url}/images/sort_asc.png"); }
-    #host_overview tbody td { color: #000000; font-size: small; padding: 8px 12px 8px 12px; }
+    #host_overview tbody td { color: #000000; padding: 8px 12px 8px 12px; }
     #host_overview tbody a { text-decoration: none; color: #005c9d; }
-    #host_overview_tbl_filter { float: right; font-size: small; color: #808080; }
+    #host_overview_tbl_filter { float: right; color: #808080; }
     #host_overview_tbl_filter label input { margin-left: 12px; }
     #host_overview_tbl_filter #filter_link a { color: #000000; background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoUlEQVR4Xu2TIQ6EMBBF/+4dOUBFBYoboBHoBsuRUCgcnpDg3/Y7ICQVK3ebvPxJ30xH9QXom/PO/PoDAjSOY8pwIwFFr2EYUobjONj33bjGd3Ylr77v2bYNp7Hwhifs3HOeUdu2LMuCE1DXdedtl612cJ1R0zRM04TT1HVNjPERO/ecZxRCSBnmeWZdV+Ma39mVvABVVZUy3EhA0f//gvQB4y08WIiD/goAAAAASUVORK5CYII=) no-repeat left center; padding: 5px 0 5px 25px; }
-    #host_overview_tbl_info { font-size: x-small; margin-top: 16px; color: #C0C0C0; }
+    #host_overview_tbl_info { margin-top: 16px; color: #C0C0C0; }
     #host_overview .bar { clear: both; }
     #host_overview .prog_bar_full { float: left; display: block; height: 12px; border: 1px solid #000000; padding: 1px; margin-right: 4px; color: white; text-align: center; }
     #host_overview .prog_bar_used { display: block; height: 12px; background-color: #8F4040; }
     #host_overview tbody td.error a { color: #FF0000; }
-    #host_overview span.usage_detail { font-size: x-small; color: #606060; }
+    #host_overview span.usage_detail { color: #606060; }
 
     #hosts { margin-left: 32px; margin-bottom: 120px; }
     #hosts a { color: #000000; }
@@ -475,7 +515,7 @@ if columns is not None:
         if col['visible'] is False:
           visible = "invisible"
       %>
-      <a href="" class="col-toggle col-${visible}" data-column="${loop.index}">${col['title']}</a>
+      <a href="" class="col-toggle col-${visible}" data-column="${loop.index}" data-column-id="${col["id"]}">${col['title']}</a>
     % endfor
   </div>
 </div>
@@ -525,11 +565,15 @@ if columns is not None:
       % if 'msg' in host:
         <p class="error">${host['msg']}</p>
       % endif
+      <% host_groups(host) %>
+      <% host_custvars(host) %>
     % else:
       <% host_general(host) %>
       <% host_groups(host) %>
       <% host_custvars(host) %>
       <% host_localfacts(host) %>
+      <% host_factorfacts(host) %>
+      <% host_customfacts(host) %>
       <% host_hardware(host) %>
       <% host_os(host) %>
       <% host_network(host) %>
@@ -555,12 +599,29 @@ function getQueryParams(qs) {
 }
 
 $(document).ready( function () {
+  // Get persisted column visibility from localStorage.
+  var columnVisibility = localStorage.getItem("columnVisibility");
+  if (columnVisibility == null) {
+    columnVisibility = {
+      % for col in cols:
+        "${col["id"]}": ${str(col["visible"]).lower()},
+      % endfor
+    };
+    localStorage.setItem("columnVisibility", JSON.stringify(columnVisibility));
+  } else {
+    columnVisibility = JSON.parse(columnVisibility);
+  }
+
   // Initialize the DataTables jQuery plugin on the host overview table
   var table = $('#host_overview_tbl').DataTable({
     paging: false,
     columnDefs: [
       % for col in cols:
-        { "targets": [${loop.index}], "visible": ${str(col['visible']).lower()} },
+        {
+          "targets": [${loop.index}],
+          "visible": ${str(col['visible']).lower()},
+          "sType": "${col['sType']}" 
+        },
       % endfor
     ],
     "fnInitComplete": function() {
@@ -574,10 +635,20 @@ $(document).ready( function () {
         this.fnFilter(qp.search);
       }
     }
-
   });
+
+  // Display or hide columns based on localStorage preferences.
+  for (var columnId in columnVisibility) {
+    var columnButton = $("a[data-column-id='" + columnId +"']");
+    var columnNr = columnButton.attr('data-column');
+    var column = table.column(columnNr);
+    column.visible(columnVisibility[columnId]);
+    var newClass = ['col-invisible','col-visible'][Number(column.visible())];
+    columnButton.get(0).className = 'col-toggle ' + newClass;
+  }
+
+  // Show a direct link to the search term
   table.on( 'search.dt', function () {
-    // Show a direct link to the search term
     $('#filter_link').remove();
     if (table.search() == "") {
     } else {
@@ -588,10 +659,15 @@ $(document).ready( function () {
   // Show and hide columns on button clicks
   $('a.col-toggle').on('click', function(e) {
     e.preventDefault();
+    var columnId = $(this).attr('data-column-id')
     var column = table.column( $(this).attr('data-column') );
     column.visible( ! column.visible() );
     var newClass = ['col-invisible','col-visible'][Number(column.visible())];
     e.target.className = 'col-toggle ' + newClass;
+
+    // Storage column visibility in localStorage.
+    columnVisibility[columnId] = column.visible();
+    localStorage.setItem("columnVisibility", JSON.stringify(columnVisibility));
   });
 
   // Show host name in header bar when scrolling

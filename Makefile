@@ -6,6 +6,7 @@ fake:
 
 test:
 	cd test && ./test.sh
+	example/generate.sh
 
 example:
 	example/generate.sh
@@ -59,7 +60,6 @@ release_deb: release_clean doc
 	mkdir -p rel_deb/usr/share/man/man1
 
 	# Copy the source to the release directory structure.
-	cp LICENSE rel_deb/usr/share/doc/$(PROG)/
 	cp README.md rel_deb/usr/share/doc/$(PROG)/
 	cp README.html rel_deb/usr/share/doc/$(PROG)/
 	cp CHANGELOG.txt rel_deb/usr/share/doc/$(PROG)/
@@ -67,10 +67,13 @@ release_deb: release_clean doc
 	cp -r lib/mako rel_deb/usr/lib/${PROG}/
 	cp -r lib/yaml rel_deb/usr/lib/${PROG}/
 	cp -r lib/ushlex.py rel_deb/usr/lib/${PROG}/
-	ln -s /usr/lib/$(PROG)/ansible-cmdb rel_deb/usr/bin/ansible-cmdb
+	ln -s ../lib/$(PROG)/ansible-cmdb rel_deb/usr/bin/ansible-cmdb
 	cp -ar contrib/debian/DEBIAN rel_deb/
+	cp contrib/debian/copyright rel_deb/usr/share/doc/$(PROG)/
+	cp contrib/debian/changelog rel_deb/usr/share/doc/$(PROG)/
+	gzip -9 rel_deb/usr/share/doc/$(PROG)/changelog
 	cp -ar contrib/ansible-cmdb.man.1 rel_deb/usr/share/man/man1/ansible-cmdb.1
-	gzip rel_deb/usr/share/man/man1/ansible-cmdb.1
+	gzip -9 rel_deb/usr/share/man/man1/ansible-cmdb.1
 
 	# Bump version numbers
 	find rel_deb/ -type f -print0 | xargs -0 sed -i "s/%%MASTER%%/$(REL_VERSION)/g" 
@@ -83,6 +86,9 @@ release_deb: release_clean doc
 	rm -rf rel_deb
 	rm -rf $(PROG)-$(REL_VERSION)
 
+	# Lint
+	lintian ansible-cmdb-*.deb
+
 release_rpm: release_clean release_deb
 	alien -r -g $(PROG)-$(REL_VERSION).deb
 	sed -i '\:%dir "/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
@@ -94,6 +100,23 @@ release_rpm: release_clean release_deb
 	sed -i '\:%dir "/usr/bin/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	cd $(PROG)-$(REL_VERSION) && rpmbuild --buildroot='$(shell readlink -f $(PROG)-$(REL_VERSION))/' -bb --target noarch '$(PROG)-$(REL_VERSION)-2.spec'
 
+install:
+	mkdir -p /usr/local/lib/$(PROG)
+	mkdir -p /usr/local/man/man1
+	cp -ar src/* /usr/local/lib/$(PROG)
+	cp -r lib/mako /usr/local/lib/$(PROG)
+	cp -r lib/yaml /usr/local/lib/$(PROG)
+	cp -r lib/ushlex.py /usr/local/lib/$(PROG)
+	cp LICENSE /usr/local/lib/$(PROG)
+	cp README.md /usr/local/lib/$(PROG)
+	cp CHANGELOG.txt /usr/local/lib/$(PROG)
+	gzip -9 -c contrib/ansible-cmdb.man.1 > /usr/local/man/man1/ansible-cmdb.man.1.gz
+	ln -s /usr/local/lib/ansible-cmdb/ansible-cmdb /usr/local/bin/ansible-cmdb
+
+uninstall:
+	rm -rf /usr/local/lib/$(PROG)
+	rm -f /usr/local/man/man/ansible-cmdb.man.1.gz
+	rm -rf /usr/local/bin/ansible-cmdb
 
 clean:
 	rm -f *.rpm
@@ -103,5 +126,4 @@ clean:
 	rm -f README.html
 	find ./ -name "*.pyc" -delete
 	find ./ -name "__pycache__" -type d -delete
-	rm -f example/html_*_[23].html
-	rm -f example/txt_*_[23].txt
+	rm -f example/gen_*

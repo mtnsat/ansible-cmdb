@@ -25,7 +25,7 @@ class Ansible(object):
         """
         self.fact_dirs = fact_dirs
         self.inventory_path = inventory_path
-        self.fact_cache = fact_cache # fact dirs are fact-caches
+        self.fact_cache = fact_cache  # fact dirs are fact-caches
         self.debug = debug
         self.hosts = {}
         self.log = logging.getLogger()
@@ -57,7 +57,7 @@ class Ansible(object):
             # Static inventory hosts file
             self._parse_hosts_inventory(inventory_path)
         elif os.path.isdir(inventory_path):
-            # Scan directory 
+            # Scan directory
             for fname in os.listdir(inventory_path):
                 self._handle_inventory(os.path.join(inventory_path, fname))
         else:
@@ -86,7 +86,7 @@ class Ansible(object):
         for hostname, key_values in hosts_parser.hosts.items():
             self.update_host(hostname, key_values)
 
-    def	_parse_hostvar_dir(self, inventory_path):
+    def _parse_hostvar_dir(self, inventory_path):
         """
         Parse host_vars dir, if it exists. This requires the yaml module, which
         is imported on-demand, since it's not a default module.
@@ -98,7 +98,7 @@ class Ansible(object):
 
         try:
             import yaml
-        except ImportError as e:
+        except ImportError:
             import yaml3 as yaml
 
         flist = []
@@ -107,10 +107,22 @@ class Ansible(object):
             break
 
         for fname in flist:
-            f = codecs.open(os.path.join(path, fname), 'r', encoding='utf8')
-            invars = yaml.load(f)
-            f.close()
-            self.update_host(fname, {'hostvars': invars})
+            f_path = os.path.join(path, fname)
+
+            # Check for ansible-vault files, because they're valid yaml for
+            # some reason... (psst, the reason is that yaml sucks)
+            first_line = open(f_path, 'r').readline()
+            if first_line.startswith('$ANSIBLE_VAULT'):
+                sys.stderr.write("Skipping encrypted vault file {}\n".format(f_path))
+                continue
+
+            try:
+                f = codecs.open(f_path, 'r', encoding='utf8')
+                invars = yaml.load(f)
+                f.close()
+                self.update_host(fname, {'hostvars': invars})
+            except Exception as err:
+                sys.stderr.write("Yaml couldn't load '{}'. Skipping\n".format(f_path))
 
     def _parse_fact_dir(self, fact_dir, fact_cache=False):
         """
@@ -120,7 +132,7 @@ class Ansible(object):
         """
         self.log.debug("Parsing fact dir: {0}".format(fact_dir))
         if not os.path.isdir(fact_dir):
-            raise IOError("No such file or directory: '{}'".format(fact_dir))
+            raise IOError("Not a directory: '{}'".format(fact_dir))
 
         flist = []
         for (dirpath, dirnames, filenames) in os.walk(fact_dir):
@@ -152,6 +164,7 @@ class Ansible(object):
         """
         Execute a dynamic inventory script and parse the results.
         """
+        self.log.debug("Reading dynamic inventory {0}".format(script))
         try:
             proc = subprocess.Popen([script, '--list'],
                                     stdout=subprocess.PIPE,
@@ -161,7 +174,7 @@ class Ansible(object):
             if proc.returncode != 0:
                 sys.stderr.write("Dynamic inventory script '{}' returned "
                                  "exitcode {}\n".format(script,
-                                                       proc.returncode))
+                                                        proc.returncode))
                 for line in stderr:
                     sys.stderr.write(line)
 

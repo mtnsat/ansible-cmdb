@@ -44,11 +44,10 @@ class HostsParser(object):
                 self._apply_section(section, self.hosts)
             for section in filter(lambda s: s['type'] == 'hosts', self.sections):
                 self._apply_section(section, self.hosts)
-        except ValueError as err:
+        except ValueError:
             tb = traceback.format_exc()
             sys.stderr.write("Error while parsing hosts contents: '{}'\n"
                              "Invalid hosts file?\n".format(tb))
-
 
     def _parse_hosts_contents(self, hosts_contents):
         """
@@ -398,11 +397,29 @@ class DynInvParser(object):
         elements which are not '_meta(data)'.
         """
         if type(group) == dict:
+            # Example:
+            #     {
+            #       "mgmt": {
+            #         "hosts": [ "mgmt01", "mgmt02" ],
+            #         "vars": {
+            #           "eth0": {
+            #             "onboot": "yes",
+            #             "nm_controlled": "no"
+            #           }
+            #         }
+            #       }
+            #     }
+            #
+            hostnames_in_group = set()
+
             # Group member with hosts and variable definitions.
             for hostname in group.get('hosts', []):
                 self._get_host(hostname)['groups'].add(group_name)
+                hostnames_in_group.add(hostname)
+            # Apply variables to all hosts in group
             for var_key, var_val in group.get('vars', {}).items():
-                self._get_host(hostname)['hostvars'][var_key] = var_val
+                for hostname in hostnames_in_group:
+                    self._get_host(hostname)['hostvars'][var_key] = var_val
         elif type(group) == list:
             # List of hostnames for this group
             for hostname in group:
