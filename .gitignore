@@ -1,3 +1,4 @@
+cmdb.html
 __pycache__
 *.pyc
 README.html
@@ -6,3 +7,8 @@ ansible-cmdb*.deb
 ansible-cmdb*.tar.gz
 ansible-cmdb*.zip
 example/gen_*
+build/
+dist/
+*.whl
+src/ansible_cmdb.egg-info/
+example/cmdb/

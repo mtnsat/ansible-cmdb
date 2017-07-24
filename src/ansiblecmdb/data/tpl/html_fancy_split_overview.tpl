@@ -21,7 +21,7 @@ else:
 
 # Set the link type for the host overview table's 'host' column (the link that
 # takes you to the host details).
-link_type = "anchor"
+link_type = "external"
 if host_details is False:
   link_type = "none"
 %>
@@ -30,37 +30,10 @@ if host_details is False:
 <% html_header_bar("Host overview") %>
 <% html_col_toggles(cols) %>
 <% html_host_overview(cols, hosts, skip_empty=skip_empty, link_type=link_type) %>
-% if host_details is True:
-  <% html_host_details(hosts, collapsed=collapsed, skip_empty=skip_empty) %>
-% endif
-<% html_footer_bar(version) %>
-
 <script>
 $(document).ready( function () {
   <% js_init_host_overview(cols) %>
   <% js_ev_collapse() %>
-
-  // Show host name in header bar when scrolling
-  $( window ).scroll(function() {
-    var scrollTop = $(window).scrollTop();
-    var curElem = false;
-    $( "#hosts h3" ).each(function( index ) {
-      var el = $(this);
-      if ((el.offset().top - 128) <= scrollTop) {
-        curElem = el;
-      } else {
-        return false;
-      }
-    });
-    if (curElem) {
-      $("header h1").text(curElem.text());
-      $('#top').show();
-    } else {
-      $("header h1").text("Host Overview");
-      $('#top').hide();
-    };
-  });
 });
 </script>
-
 <% html_footer() %>

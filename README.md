@@ -2,6 +2,7 @@ Ansible Configuration Management Database
 =========================================
 
 ![Status: Stable](https://img.shields.io/badge/status-stable-green.svg)
+![Build Status](http://git.electricmonk.nl/job/ansible-cmdb/shield)
 ![Activity: Active development](https://img.shields.io/badge/activity-active%20development-green.svg)
 ![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)
 
@@ -9,12 +10,12 @@ About
 -----
 
 Ansible-cmdb takes the output of Ansible's fact gathering and converts it into
-a static HTML overview page containing system configuration information.
+a static HTML overview page (and other things) containing system configuration
+information.
 
-It supports multiple templates (html, txt_table, csv, json output, markdown)
-and extending information gathered by Ansible with custom data. For each host
-it also shows the groups, host variables, custom variables and machine-local
-facts.
+It supports multiple types of output (html, csv, sql, etc) and extending
+information gathered by Ansible with custom data. For each host it also shows
+the groups, host variables, custom variables and machine-local facts.
 
 ![](https://raw.githubusercontent.com/fboender/ansible-cmdb/master/contrib/screenshot-overview.png)
 
@@ -22,8 +23,45 @@ facts.
 
 [HTML example](https://rawgit.com/fboender/ansible-cmdb/master/example/html_fancy.html) output.
 
+Supported output formats / templates:
+
+* Fancy HTML (`--template html_fancy`), as seen in the screenshots above.
+* Fancy HTML Split (`--template html_fancy_split`), with each host's details
+  in a separate file (for large number of hosts).
+* CSV (`--template csv`), the trustworthy and flexible comma-separated format.
+* JSON (`--template json`), a dump of all facts in JSON format.
+* Markdown (`--template markdown`), useful for copy-pasting into Wiki's and
+  such.
+* Markdown Split ('--template markdown_split'), with each host's details
+  in a seperate file (for large number of hosts).
+* SQL (`--template sql`), for importing host facts into a (My)SQL database.
+* Plain Text table (`--template txt_table`), for the console gurus.
+* and of course, any custom template you're willing to make.
+
 Installation
 ------------
+
+Ansible-cmdb can be installed using `pip` (the Python package manager), with
+stand-alone packages for your distribution or through brew and plain old `make
+install`.
+
+### Through Pip
+
+For **installation via Pip**:
+
+Install `pip` [for your
+  distribution](https://packaging.python.org/install_requirements_linux/) if
+  you don't have it yet.
+
+Install Ansible-cmdb through Pip:
+
+    sudo pip install ansible-cmdb
+
+You can also upgrade Ansible-cmdb through Pip:
+
+    sudo pip install --upgrade ansible-cmdb
+
+### Through distribution packages
 
 Get the package for your distribution from the [Releases
 page](https://github.com/fboender/ansible-cmdb/releases) (Not required for
@@ -35,7 +73,12 @@ For **Debian / Ubuntu** systems:
 
 For **Redhat / Centos** systems:
 
-    sudo yum install ansible-cmdb*.rpm
+    sudo yum --disablerepo=* install ansible-cmdb*.rpm
+
+For **Arch** systems:
+    [aur/ansible-cmdb](https://aur.archlinux.org/packages/ansible-cmdb/)
+
+### For other systems
 
 For **MacOS X** systems:
 
@@ -101,7 +144,8 @@ directory or dynamic inventory and extract useful information from it such as:
 
 Reading the inventory is done using the `-i` switch to ansible-cmdb.  It takes
 a single parameter: your hosts file, directory containing your hosts files or
-path to your dynamic inventory script.
+path to your dynamic inventory script. You may specify multiple inventory
+files by separating them with a comma (do not include spaces!).
 
 For example:
 
@@ -148,6 +192,8 @@ template under the "Custom variables" heading.
 
 ### Templates
 
+#### Specifying templates
+
 ansible-cmdb offers multiple templates. You can choose your template with the
 `-t` or `--template` argument:
 
@@ -155,43 +201,70 @@ ansible-cmdb offers multiple templates. You can choose your template with the
 
 The 'html_fancy' template is the default.  
 
-Ansible-cmdb currently provides the following templates out of the box:
-
-* `html_fancy`: A fancy HTML page that uses jQuery and DataTables to give you a
-  searchable, sortable table overview of all hosts with detailed information
-  just a click away.
-
-  It takes a parameter `local_js` which, if set, will load resources from the
-  local disk instead of over the network. To enable it, call ansible-cmdb with:
-
-      ansible-cmdb -t html_fancy -p local_js=1 out > overview.html
-
-  It can be easily extended by copying it and modifying the `cols` definition
-  at the top.
-
-* `txt_table`: A quick text table summary of the available hosts with some
-  minimal information.
-
-* `json`: The json template simply dumps a JSON-encoded representation of the
-  gathered information. This includes all the extra information scanned by
-  ansible-cmdb such as groups, variables, custom information, etc.
-
-* `csv`: The CSV template outputs a CSV file of your hosts.
-
-* `markdown`: The Markdown template generates host information in the
-  Markdown format.
-
-* `sql`: The SQL template generates an .sql file that can be loaded into an
-  SQLite or MySQL database.
-
-        $ ansible-cmdb -t sql -i hosts out > cmdb.sql
-        $ echo "CREATE DATABASE ansiblecmdb" | mysql 
-        $ mysql ansiblecmdb < cmdb.sql
-
-You can create your own template or extend an existing one by copying it and
-refering to the full path to the template when using the `-t` option:
+Templates can be referred to by name or by relative/absolute path to the
+`.tpl` file. This lets you implement your own templates. For example:
 
     $ ansible-cmdb -t /home/fboender/my_template out/ > my_template.html
+
+#### Template parameters
+
+Some templates support parameters that influence their output. Parameters are
+specified using the `-p` or `--parameter` option to `ansible-cmdb`. Multiple
+parameters may be specified by separating them with commas. There must be *no*
+spaces in the parameters.
+
+For example, to specify the `html_fancy` template with local Javascript
+libraries and closed trees:
+
+    ansible-cmdb -t html_fancy -p local_js=1,collapsed=1 out > overview.html
+
+
+#### Standard available templates
+
+Ansible-cmdb currently provides the following templates out of the box:
+
+* **`html_fancy`**: A dynamic, modern HTML page containing all hosts.
+* **`html_fancy_split`**: A dynamic, modern HTML page with each host's details in a separate file.
+* **`txt_table`**: A quick text table summary of the available hosts with some minimal information.
+* **`json`**: Dumps all hosts including groups, variable, custom info in JSON format.
+* **`csv`**: The CSV template outputs a CSV file of your hosts.
+* **`markdown`**: The Markdown template generates host information in the Markdown format.
+* **`sql`**: The SQL template generates an .sql file that can be loaded into an SQLite or MySQL database.
+
+**html_fancy**:
+
+`html_fancy` is currently the default template.
+
+A fancy HTML page that uses jQuery and DataTables to give you a searchable,
+sortable table overview of all hosts with detailed information just a click
+away.
+
+It takes optional parameters:
+
+* `local_js=0|1`: Load resources from local disk (default=`0`). If set, will load resources from the local disk instead of over the network.
+* `collapsed=0|1`: Controls whether host information is collapsed by default or not. A value of `1` will collapse all host information by defaultcontrols whether host information is collapsed by default or not. A value of `1` will collapse all host information by default. (default='0')
+* `host_details=0|1`: Render host details or not. (default=`1`)
+* `skip_empty=0|1`: Skip hosts for which no facts were gathered (unreachable, etc). (default=`0`).
+
+**html_fancy_split**:
+
+This template is basically the same as the **html_fancy** template, but it
+generates a `cmdb/` directory with an `index.html` file and a separate html
+file for each host's details.
+
+Usage:
+
+    ansible-cmdb -t html_fancy_split -i hosts out/ 
+
+It accepts the same parameters as the `html_fancy` template.
+
+**sql**:
+
+The `sql` template generates an .sql file that can be loaded into an SQLite or MySQL database.
+
+    $ ansible-cmdb -t sql -i hosts out > cmdb.sql
+    $ echo "CREATE DATABASE ansiblecmdb" | mysql 
+    $ mysql ansiblecmdb < cmdb.sql
 
 ### Fact caching
 
@@ -393,103 +466,12 @@ Ansible currently does not include disk size information for Solaris hosts. As
 such, we can't include it in the output of Ansible-cmdb. See issue #24 for more
 information.
 
-### Python packaging / Pypi?
 
-Python has some of the most horrendous packaging infrastructure I've ever
-encountered in 25 years of programming. As such, anything related to Python
-packaging will not be supported.
+Contributing and Development
+----------------------------
 
-Development
------------
-
-### Running from the git repo
-
-If you want to run ansible-cmdb directly from the Git repo:
-
-    $ cd ansible-cmdb
-    $ export PYTHONPATH="$(readlink -f lib)"
-    $ src/ansible-cmdb
-
-### Inner workings
-
-Here's a quick introduction on how ansible-cmdb works internally.
-
-1. The main section in `ansible-cmdb` reads the commandline params and
-   instantiates an `Ansible` object.
-1. The `Ansible` object first reads in all the facts by calling
-   `Ansible.parse_fact_dir()` for each argument. This includes the user-extended
-   facts.
-1. If hosts file(s) should be parsed (`-i` option), ansible calls
-   `Ansible.parse_hosts_inventory()`. This first reads in all found hosts files
-   into one big string, and then it parses it. For this it uses the
-   `AnsibleHostParser` class.
-1. The `AnsibleHostParser` class first parses the inventory and then creates a
-   dictionary with all known ansible node names (hosts) as the keys, but with
-   empty values. It then goes through the 'children', 'vars' and normal
-   sections from the inventory and applies the found information to the hosts
-   dictionary.
-1. When `AnsibleHostParser` is done, the `Ansible` class takes all the parsed
-   hosts information and updates its own version of the hosts dictionary.
-1. Finally, the output is generated by the main section.
-
-Updating a host in the `Ansible` object is done using the `Ansible.update_host`
-method. This method does a deep-update of a dictionary. This lets ansible-cmdb
-overlay information from the facts dir, extended / manual facts and hosts 
-inventory files.
-
-### Make targets
-
-For building, `make` is used. Here are some useful targets:
-
-* `make test`: build some tests.
-* `make release`: build a release.
-* `make clean`: remove build and other artifacts.
-
-### Build packages and source-ball
-
-To build Debian, RedHat and source-packages for ansible-cmdb you'll need a
-Debian based operating system and you'll have to install the following
-dependencies:
-
-- git
-- make
-- python-markdown
-- zip
-- fakeroot
-- alien
-
-You can then build the packages with
-
-    make release REL_VERSION=$VERSION
-
-where `$VERSION` is a (arbitrary) version number.
-
-In order to build releases, your repository will have to be completely clean:
-everything must be commited and there must be no untracked files. If you want
-to build a test release, you can temporary stash your untracked changes:
-
-    git stash -u
-
-### Contributions
-
-If you wish to contribute code, please consider the following:
-
-* Any form of Python packaging will NOT be supported. Merge requests involving
-  python packages will not be considered. See issue #23.
-* Thank you for even considering contributing. I'm quite newbie-friendly, so
-  don't hesitate to ask for help! 
-* Code should be reasonably PEP8-like. I'm not too strict on this.
-* One logical change per merge request.
-* By putting in a merge request or putting code in comments, you automatically
-  grant me permission to include this code in ansible-cmdb under the license
-  (GPLv3) that ansible-cmdb uses.
-* Please don't be disappointed or angry if your contributions end up unused.
-  It's not that they aren't appreciated, but I can be somewhat strict when it
-  comes to code quality, feature-creep, etc.
-
-When in doubt, just open a pull-request and post a comment on what you're
-unclear of, and we'll figure it out.
-
+See the [Development documentation](DEVELOPMENT.md) for information on contributing and
+development.
 
 Licensing and credits
 ---------------------

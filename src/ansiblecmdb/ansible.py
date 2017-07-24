@@ -14,17 +14,22 @@ class Ansible(object):
     """
     The Ansible class is responsible for gathering host information.
     """
-    def __init__(self, fact_dirs, inventory_path=None, fact_cache=False, debug=False):
+    def __init__(self, fact_dirs, inventory_paths=None, fact_cache=False, debug=False):
         """
         `fact_dirs` is a list of paths to directories containing facts gathered
-        by ansible's 'setup' module. `inventory_path` points to the file or
-        directory containing the inventory. It will be scanned to extract
-        groups, variables and additional facts. If this points to a file, it's
-        read as a hosts file. If it's a directory, it is scanned for hosts
-        files and dynamic inventory scripts.
+        by ansible's 'setup' module.
+
+        `inventory_paths` is a list with files or directories containing the
+        inventory. It will be scanned to extract groups, variables and
+        additional facts. If entries point to a file, it's read as a
+        hosts file. If it's a directory, it is scanned for hosts files and
+        dynamic inventory scripts.
         """
         self.fact_dirs = fact_dirs
-        self.inventory_path = inventory_path
+        if inventory_paths is None:
+            self.inventory_paths = []
+        else:
+            self.inventory_paths = inventory_paths
         self.fact_cache = fact_cache  # fact dirs are fact-caches
         self.debug = debug
         self.hosts = {}
@@ -35,8 +40,8 @@ class Ansible(object):
             self._parse_fact_dir(fact_dir, self.fact_cache)
 
         # Scan the inventory for known hosts.
-        if self.inventory_path is not None:
-            self._handle_inventory(self.inventory_path)
+        for inventory_path in self.inventory_paths:
+            self._handle_inventory(inventory_path)
 
     def _handle_inventory(self, inventory_path):
         """
@@ -50,7 +55,7 @@ class Ansible(object):
             files.
         """
         if os.path.isfile(inventory_path) and \
-           stat.S_IXUSR & os.stat(inventory_path)[stat.ST_MODE]:
+           util.is_executable(inventory_path):
             # It's a file and it's executable. Handle as dynamic inventory script
             self._parse_dyn_inventory(inventory_path)
         elif os.path.isfile(inventory_path):
@@ -59,9 +64,13 @@ class Ansible(object):
         elif os.path.isdir(inventory_path):
             # Scan directory
             for fname in os.listdir(inventory_path):
+                # Skip files that end with certain extensions or characters
+                if any(fname.endswith(ext) for ext in ["~", ".orig", ".bak", ".ini", ".cfg", ".retry", ".pyc", ".pyo"]):
+                    continue
+
                 self._handle_inventory(os.path.join(inventory_path, fname))
         else:
-            sys.stderr.write("Don't know what to do with inventory '{}'\n".format(inventory_path))
+            raise IOError("Invalid inventory file / dir: '{0}'".format(inventory_path))
         self._parse_hostvar_dir(inventory_path)
 
     def _parse_hosts_inventory(self, inventory_path):
@@ -113,16 +122,16 @@ class Ansible(object):
             # some reason... (psst, the reason is that yaml sucks)
             first_line = open(f_path, 'r').readline()
             if first_line.startswith('$ANSIBLE_VAULT'):
-                sys.stderr.write("Skipping encrypted vault file {}\n".format(f_path))
+                sys.stderr.write("Skipping encrypted vault file {0}\n".format(f_path))
                 continue
 
             try:
                 f = codecs.open(f_path, 'r', encoding='utf8')
-                invars = yaml.load(f)
+                invars = yaml.safe_load(f)
                 f.close()
                 self.update_host(fname, {'hostvars': invars})
             except Exception as err:
-                sys.stderr.write("Yaml couldn't load '{}'. Skipping\n".format(f_path))
+                sys.stderr.write("Yaml couldn't load '{0}'. Skipping\n".format(f_path))
 
     def _parse_fact_dir(self, fact_dir, fact_cache=False):
         """
@@ -132,7 +141,7 @@ class Ansible(object):
         """
         self.log.debug("Parsing fact dir: {0}".format(fact_dir))
         if not os.path.isdir(fact_dir):
-            raise IOError("Not a directory: '{}'".format(fact_dir))
+            raise IOError("Not a directory: '{0}'".format(fact_dir))
 
         flist = []
         for (dirpath, dirnames, filenames) in os.walk(fact_dir):
@@ -172,8 +181,8 @@ class Ansible(object):
                                     close_fds=True)
             stdout, stderr = proc.communicate(input)
             if proc.returncode != 0:
-                sys.stderr.write("Dynamic inventory script '{}' returned "
-                                 "exitcode {}\n".format(script,
+                sys.stderr.write("Dynamic inventory script '{0}' returned "
+                                 "exitcode {1}\n".format(script,
                                                         proc.returncode))
                 for line in stderr:
                     sys.stderr.write(line)
@@ -182,7 +191,7 @@ class Ansible(object):
             for hostname, key_values in dyninv_parser.hosts.items():
                 self.update_host(hostname, key_values)
         except OSError as err:
-            sys.stderr.write("Exception while executing dynamic inventory script '{}':\n\n".format(script))
+            sys.stderr.write("Exception while executing dynamic inventory script '{0}':\n\n".format(script))
             sys.stderr.write(str(err) + '\n')
 
     def update_host(self, hostname, key_values):

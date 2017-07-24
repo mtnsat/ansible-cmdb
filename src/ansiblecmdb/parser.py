@@ -46,7 +46,7 @@ class HostsParser(object):
                 self._apply_section(section, self.hosts)
         except ValueError:
             tb = traceback.format_exc()
-            sys.stderr.write("Error while parsing hosts contents: '{}'\n"
+            sys.stderr.write("Error while parsing hosts contents: '{0}'\n"
                              "Invalid hosts file?\n".format(tb))
 
     def _parse_hosts_contents(self, hosts_contents):
@@ -160,7 +160,11 @@ class HostsParser(object):
         else:
             tokens = shlex.split(line.strip())
             name = tokens.pop(0)
-            key_values = self._parse_vars(tokens)
+            try:
+                key_values = self._parse_vars(tokens)
+            except ValueError:
+                sys.stderr.write("Unsupported vars syntax. Skipping line: {0}\n".format(line))
+                return (name, {})
         return (name, key_values)
 
     def _parse_line_vars(self, line):
@@ -177,7 +181,7 @@ class HostsParser(object):
         k, v = line.strip().split('=', 1)
         if v.startswith('['):
             try:
-                list_res = yaml.load(v)
+                list_res = yaml.safe_load(v)
                 if isinstance(list_res[0], dict):
                     key_values = list_res[0]
                     return key_values
@@ -353,7 +357,7 @@ class HostsParser(object):
             # Strip port numbers off and return
             return [host_name.split(':')[0] for host_name in hosts_done]
         except Exception as e:
-            sys.stderr.write("Couldn't parse host definition '{}': {}\n".format(hostdef, e))
+            sys.stderr.write("Couldn't parse host definition '{0}': {1}\n".format(hostdef, e))
             return []
 
 
@@ -426,7 +430,7 @@ class DynInvParser(object):
                 self._get_host(hostname)['groups'].add(group_name)
         else:
             sys.stderr.write("Invalid element found in dynamic "
-                             "inventory output: {}".format(type(group)))
+                             "inventory output: {0}".format(type(group)))
 
     def _parse_meta(self, meta):
         """
