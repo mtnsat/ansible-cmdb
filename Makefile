@@ -9,7 +9,7 @@ test:
 	example/generate.sh
 
 example:
-	PYTHONPATH=lib src/ansible-cmdb -i example/hosts example/out > cmdb.html
+	PYTHONPATH=lib src/ansible-cmdb -q -i example/hosts example/out example/out_custom > cmdb.html
 
 doc:
 	markdown_py README.md > README.html
@@ -44,10 +44,7 @@ release_src: release_check clean doc
 	# Prepare source
 	mkdir $(PROG)-$(REL_VERSION)
 	cp -a src/* $(PROG)-$(REL_VERSION)/
-	cp -r lib/mako $(PROG)-$(REL_VERSION)/
-	cp -r lib/yaml $(PROG)-$(REL_VERSION)/
-	cp -r lib/ushlex.py $(PROG)-$(REL_VERSION)/
-	cp -r lib/jsonxs.py $(PROG)-$(REL_VERSION)/
+	cp -r lib/* $(PROG)-$(REL_VERSION)/
 	cp LICENSE $(PROG)-$(REL_VERSION)/
 	cp README.md $(PROG)-$(REL_VERSION)/
 	cp contrib/release_Makefile $(PROG)-$(REL_VERSION)/Makefile
@@ -63,8 +60,6 @@ release_src: release_check clean doc
 release_deb: release_check clean doc
 	mkdir -p rel_deb/usr/bin
 	mkdir -p rel_deb/usr/lib/${PROG}
-	mkdir -p rel_deb/usr/lib/${PROG}/mako
-	mkdir -p rel_deb/usr/lib/${PROG}/yaml
 	mkdir -p rel_deb/usr/share/doc/$(PROG)
 	mkdir -p rel_deb/usr/share/man/man1
 
@@ -72,10 +67,7 @@ release_deb: release_check clean doc
 	cp README.md rel_deb/usr/share/doc/$(PROG)/
 	cp README.html rel_deb/usr/share/doc/$(PROG)/
 	cp -r src/* rel_deb/usr/lib/${PROG}/
-	cp -r lib/mako rel_deb/usr/lib/${PROG}/
-	cp -r lib/yaml rel_deb/usr/lib/${PROG}/
-	cp -r lib/ushlex.py rel_deb/usr/lib/${PROG}/
-	cp -r lib/jsonxs.py rel_deb/usr/lib/${PROG}/
+	cp -r lib/* rel_deb/usr/lib/${PROG}/
 	ln -s ../lib/$(PROG)/ansible-cmdb rel_deb/usr/bin/ansible-cmdb
 	cp -a contrib/debian/DEBIAN rel_deb/
 	cp contrib/debian/copyright rel_deb/usr/share/doc/$(PROG)/
@@ -100,6 +92,7 @@ release_rpm: release_check clean release_deb
 	sed -i '\:%dir "/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	sed -i '\:%dir "/usr/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	sed -i '\:%dir "/usr/share/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
+	sed -i '\:%dir "/usr/share/doc/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	sed -i '\:%dir "/usr/share/man/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	sed -i '\:%dir "/usr/share/man/man1/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
 	sed -i '\:%dir "/usr/lib/":d' $(PROG)-$(REL_VERSION)/$(PROG)-$(REL_VERSION)-2.spec
@@ -115,19 +108,16 @@ release_wheel: release_check clean
 	echo `git rev-parse --abbrev-ref HEAD | tr "[:lower:]" "[:upper:]"` > src/ansiblecmdb/data/VERSION
 
 install:
-	mkdir -p /usr/local/lib/$(PROG)
-	mkdir -p /usr/local/man/man1
-	cp -a src/* /usr/local/lib/$(PROG)
-	cp -r lib/mako /usr/local/lib/$(PROG)
-	cp -r lib/yaml /usr/local/lib/$(PROG)
-	cp -r lib/ushlex.py /usr/local/lib/$(PROG)
-	cp -r lib/jsonxs.py /usr/local/lib/$(PROG)
-	cp LICENSE /usr/local/lib/$(PROG)
-	cp README.md /usr/local/lib/$(PROG)
-	gzip -9 -c contrib/ansible-cmdb.man.1 > /usr/local/man/man1/ansible-cmdb.man.1.gz
-	ln -s /usr/local/lib/ansible-cmdb/ansible-cmdb /usr/local/bin/ansible-cmdb
+	umask 0022 && mkdir -p /usr/local/lib/$(PROG)
+	umask 0022 && mkdir -p /usr/local/man/man1
+	umask 0022 && cp -a src/* /usr/local/lib/$(PROG)
+	umask 0022 && cp -r lib/* /usr/local/lib/$(PROG)
+	umask 0022 && cp LICENSE /usr/local/lib/$(PROG)
+	umask 0022 && cp README.md /usr/local/lib/$(PROG)
+	umask 0022 && gzip -9 -c contrib/ansible-cmdb.man.1 > /usr/local/man/man1/ansible-cmdb.man.1.gz
+	umask 0022 && ln -s /usr/local/lib/ansible-cmdb/ansible-cmdb /usr/local/bin/ansible-cmdb
 
 uninstall:
 	rm -rf /usr/local/lib/$(PROG)
-	rm -f /usr/local/man/man/ansible-cmdb.man.1.gz
+	rm -rf /usr/local/man/man/ansible-cmdb*
 	rm -rf /usr/local/bin/ansible-cmdb

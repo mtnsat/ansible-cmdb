@@ -5,7 +5,6 @@ import re
 from distutils.core import setup
 from setuptools import find_packages
 
-
 def get_long_description():
     path = os.path.join(os.path.dirname(__file__), 'README.md')
     with open(path) as f:
@@ -18,7 +17,7 @@ def get_data_files(path, strip='', prefix=''):
     data_files = []
     for dirpath, dirnames, filenames in os.walk(path):
         files = [os.path.join(dirpath, filename) for filename in filenames]
-        data_files.append( (prefix + dirpath[len(strip):], files) )
+        data_files.append( [prefix + dirpath[len(strip):], files] )
     return data_files
 
 
@@ -28,7 +27,6 @@ if sys.argv[-1] == 'publish':
     print(' git tag {0}'.format(get_version()))
     print(' git push --tags')
     sys.exit()
-
 
 setup(
     name='ansible-cmdb',
@@ -44,16 +42,15 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages('src'),
     include_package_data=True,
-    data_files=get_data_files('src/ansiblecmdb/data',
-                              strip='src',
-                              prefix='lib/'),
+    data_files=\
+        get_data_files(
+            'src/ansiblecmdb/data',
+            strip='src',
+            prefix='lib'
+        ) +
+        [['lib/ansiblecmdb/', ['src/ansible-cmdb.py']]],
     zip_safe=False,
-    install_requires=[
-        'mako>=1.0',
-        'pyyaml>=1.0',
-        'ushlex>=0.99',
-        'jsonxs>=0.3',
-    ],
+    install_requires=['mako', 'pyyaml', 'ushlex', 'jsonxs'],
     scripts=[
         'src/ansible-cmdb',
     ],

@@ -10,11 +10,12 @@
 ## Column definitions
 ##
 
-<%def name="var_cols(cols_visible=None)">
+<%def name="var_cols(cols_visible=None, cols_exclude=None)">
   <%
   cols = [
     {"title": "Name",          "id": "name",          "func": col_name,           "sType": "string", "visible": True},
     {"title": "Groups",        "id": "groups",        "func": col_groups,         "sType": "string", "visible": False},
+    {"title": "Cust",          "id": "cust",          "func": col_cust,           "sType": "string", "visible": False},
     {"title": "DTAP",          "id": "dtap",          "func": col_dtap,           "sType": "string", "visible": False},
     {"title": "Comment",       "id": "comment",       "func": col_comment,        "sType": "string", "visible": False},
     {"title": "Ext ID",        "id": "ext_id",        "func": col_ext_id,         "sType": "string", "visible": False},
@@ -35,6 +36,8 @@
     {"title": "PhysDisk size", "id": "physdisk_size", "func": col_physdisk_sizes, "sType": "string", "visible": False},
     {"title": "Nr of Ifaces",  "id": "nr_of_ifaces",  "func": col_nr_of_ifaces,   "sType": "num",    "visible": False},
     {"title": "Timestamp",     "id": "timestamp",     "func": col_gathered,       "sType": "string", "visible": False},
+    {"title": "Product Name",  "id": "prodname",      "func": col_prodname,       "sType": "string", "visible": False},
+    {"title": "Product Serial","id": "prodserial",    "func": col_prodserial,     "sType": "string", "visible": False},
   ]
 
   # Enable columns specified with '--columns'
@@ -45,6 +48,10 @@
       else:
         col["visible"] = False
   
+  # Remove columns that should be excluded
+  if cols_exclude is not None:
+    cols = filter(lambda col: col["id"] not in cols_exclude, cols)
+
   return cols
   %>
 </%def>
@@ -53,31 +60,51 @@
 ## Helper functions for dumping python datastructures
 ##
 
-<%def name="r_list(l)">
+<%def name="r_list(l, sort=False)">
+  <%
+    if sort is True:
+      try:
+        l = sorted(l)
+      except TypeError:
+        # Can't sort contents of l
+        pass
+  %>
   % for i in l:
     % if type(i) == list:
-      ${r_list(i)}
+      ${r_list(i, sort=sort)}
     % elif type(i) == dict:
-      ${r_dict(i)}
+      ${r_dict(i, sort=sort)}
     % else:
       ${i}
     % endif
   % endfor
 </%def>
 
-<%def name="r_dict(d)">
+<%def name="r_dict(d, sort=False)">
+  <%
+    keys = d.keys()
+    if sort is True:
+      keys = sorted(keys)
+  %>
   <table>
-    % for k, v in d.items():
+    % for k in keys:
+      <% v = d[k] %>
       <tr>
-        <th>${k.replace('ansible_', '')}</th>
+        <th>
+            % if type(k) == "str":
+                ${k.replace('ansible_', '')}
+            % else:
+                ${k}
+            % endif
+        </th>
         <td>
-        % if type(v) == list:
-          ${r_list(v)}
-        % elif type(v) == dict:
-          ${r_dict(v)}
-        % else:
-          ${v}
-        % endif
+            % if type(v) == list:
+              ${r_list(v, sort=sort)}
+            % elif type(v) == dict:
+              ${r_dict(v, sort=sort)}
+            % else:
+              ${v}
+            % endif
         </td>
       </tr>
     % endfor
@@ -122,6 +149,8 @@
       /* ansible-cmdb */
       *, body { font-family: sans-serif; font-weight: lighter; }
       a { text-decoration: none; }
+      b { font-weight: bold; }
+      p { margin-bottom: 1em; }
   
       header { position: fixed; top: 0px; left: 0px; right: 0px; background-color: #0071b8; overflow: auto; color: #E0E0E0; padding: 15px; z-index: 1000; }
       header h1 { font-size: x-large; float: left; line-height: 32px; font-weight: bold; }
@@ -244,21 +273,12 @@
       </thead>
       <tbody>
         % for hostname, host in hosts.items():
-          <%
-          log.debug(u"Rendering host overview for {0}".format(hostname))
-          %>
+          <% log.debug(u"Rendering host overview for {0}".format(hostname)) %>
           % if skip_empty is False or 'ansible_facts' in host:
-            <tr>
-              % if 'ansible_facts' not in host:
-                <td class="error">${col_name(host)}</td>
-                % for cnt in range(len(cols) - 1):
-                    <td>&nbsp;</td>
-                % endfor
-              % else:
-                % for col in cols:
-                  <td>${col["func"](host, **kwargs)}</td>
-                % endfor
-              % endif
+            <tr>\
+              % for col in cols:
+                <td>${col["func"](host, **kwargs)}</td>\
+              % endfor
             </tr>
           % endif
         % endfor
@@ -468,6 +488,10 @@
   ${'<br>'.join(jsonxs(host, 'groups', default=''))}
 </%def>
 
+<%def name="col_cust(host, **kwargs)">
+  ${jsonxs(host, 'hostvars.cust', default='')}
+</%def>
+
 <%def name="col_fqdn(host, **kwargs)">
   ${jsonxs(host, 'ansible_facts.ansible_fqdn', default='')}
 </%def>
@@ -480,7 +504,7 @@
       if ipv4_addresses:
         default_ipv4 = ipv4_addresses[0]
     else:
-      default_ipv4 = jsonxs(host, 'ansible_facts.ansible_default_ipv4.address', default={})
+      default_ipv4 = jsonxs(host, 'ansible_facts.ansible_default_ipv4.address', default='')
   %>
   ${default_ipv4}
 </%def>
@@ -636,9 +660,15 @@
 </%def>
 
 <%def name="col_gathered(host, **kwargs)">
-  % if 'ansible_date_time' in host['ansible_facts']:
-    ${host['ansible_facts']['ansible_date_time'].get('iso8601')}
-  % endif
+  ${jsonxs(host, 'ansible_facts.ansible_date_time.iso8601', default='')}
+</%def>
+
+<%def name="col_prodname(host, **kwargs)">
+  ${jsonxs(host, 'ansible_facts.ansible_product_name', default='')}
+</%def>
+
+<%def name="col_prodserial(host, **kwargs)">
+  ${jsonxs(host, 'ansible_facts.ansible_product_serial', default='')}
 </%def>
 
 ##
@@ -674,19 +704,25 @@
   % if len(host['hostvars']) != 0:
     <h4 class="toggle-collapse ${collapsed_class}">Custom variables</h4>
     <div class="collapsable ${collapsed_class}">
+    <p><b>Careful:</b> these variables may be overridden in various places by Ansible</p>
     <table>
-        % for var_name, var_value in host['hostvars'].items():
-          <tr>
-            <th>${var_name}</th>
-            <td>
-              % if type(var_value) == dict:
-                ${r_dict(var_value)}
-              % elif type(var_value) == list:
-                ${r_list(var_value)}
-              % else:
-                ${var_value}
-              % endif
-        % endfor
+      % for var_name in sorted(host.get('hostvars', {}).keys()):
+        <%
+        var_value = host['hostvars'][var_name]
+        %>
+        <tr>
+          <th>${var_name}</th>
+          <td>
+            % if type(var_value) == dict:
+              ${r_dict(var_value)}
+            % elif type(var_value) == list:
+              ${r_list(var_value)}
+            % else:
+              ${var_value}
+            % endif
+          </td>
+        </tr>
+      % endfor
     </table>
     </div>
   % endif
@@ -696,7 +732,7 @@
   % if len(jsonxs(host, 'ansible_facts.ansible_local', default={}).items()) != 0:
     <h4 class="toggle-collapse ${collapsed_class}">Host local facts</h4>
     <div class="collapsable ${collapsed_class}">
-    ${r_dict(jsonxs(host,  'ansible_facts.ansible_local', default={}))}
+    ${r_dict(jsonxs(host, 'ansible_facts.ansible_local', default={}), sort=True)}
     </div>
   % endif
 </%def>
@@ -711,7 +747,7 @@
   % if len(facter_facts) != 0:
     <h4 class="toggle-collapse ${collapsed_class}">Facter facts</h4>
     <div class="collapsable ${collapsed_class}">
-    ${r_dict(facter_facts)}
+    ${r_dict(facter_facts, sort=True)}
     </div>
   % endif
 </%def>
@@ -720,7 +756,7 @@
   % if len(host.get('custom_facts', {}).items()) != 0:
     <h4 class="toggle-collapse ${collapsed_class}">Custom facts</h4>
     <div class="collapsable ${collapsed_class}">
-    ${r_dict(host.get('custom_facts', {}))}
+    ${r_dict(host.get('custom_facts', {}), sort=True)}
     </div>
   % endif
 </%def>

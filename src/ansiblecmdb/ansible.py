@@ -1,13 +1,24 @@
 import sys
 import os
 import json
-import stat
 import subprocess
 import codecs
 import logging
-
+from . import ihateyaml
 import ansiblecmdb.util as util
 import ansiblecmdb.parser as parser
+
+
+def strip_exts(s, exts):
+    """
+    Given a string and an interable of extensions, strip the extenion off the
+    string if the string ends with one of the extensions.
+    """
+    f_split = os.path.splitext(s)
+    if f_split[1] in exts:
+        return f_split[0]
+    else:
+        return s
 
 
 class Ansible(object):
@@ -33,7 +44,7 @@ class Ansible(object):
         self.fact_cache = fact_cache  # fact dirs are fact-caches
         self.debug = debug
         self.hosts = {}
-        self.log = logging.getLogger()
+        self.log = logging.getLogger(__name__)
 
         # Process facts gathered by Ansible's setup module of fact caching.
         for fact_dir in self.fact_dirs:
@@ -42,6 +53,14 @@ class Ansible(object):
         # Scan the inventory for known hosts.
         for inventory_path in self.inventory_paths:
             self._handle_inventory(inventory_path)
+
+        # Scan for host vars and apply them
+        for inventory_path in self.inventory_paths:
+            self._parse_hostvar_dir(inventory_path)
+
+        # Scan for group vars and apply them
+        for inventory_path in self.inventory_paths:
+            self._parse_groupvar_dir(inventory_path)
 
     def _handle_inventory(self, inventory_path):
         """
@@ -54,24 +73,33 @@ class Ansible(object):
           - a directory: scanned for Ansible 'hosts' and dynamic inventory
             files.
         """
+        self.log.debug("Determining type of inventory_path {}".format(inventory_path))
         if os.path.isfile(inventory_path) and \
            util.is_executable(inventory_path):
             # It's a file and it's executable. Handle as dynamic inventory script
+            self.log.debug("{} is a executable. Handle as dynamic inventory script".format(inventory_path))
             self._parse_dyn_inventory(inventory_path)
         elif os.path.isfile(inventory_path):
             # Static inventory hosts file
+            self.log.debug("{} is a file. Handle as static inventory file".format(inventory_path))
             self._parse_hosts_inventory(inventory_path)
         elif os.path.isdir(inventory_path):
+            # Directory
+            self.log.debug("{} is a dir. Just try most files to see if they happen to be inventory files".format(inventory_path))
+
+            # Don't parse folder as inventory if it is a .git or group/host_vars
+            if any(os.path.basename(inventory_path) == name for name in ['.git', 'group_vars', 'host_vars']):
+                return
+
             # Scan directory
             for fname in os.listdir(inventory_path):
                 # Skip files that end with certain extensions or characters
-                if any(fname.endswith(ext) for ext in ["~", ".orig", ".bak", ".ini", ".cfg", ".retry", ".pyc", ".pyo"]):
+                if any(fname.endswith(ext) for ext in ["~", ".orig", ".bak", ".ini", ".cfg", ".retry", ".pyc", ".pyo", ".gitignore"]):
                     continue
 
                 self._handle_inventory(os.path.join(inventory_path, fname))
         else:
             raise IOError("Invalid inventory file / dir: '{0}'".format(inventory_path))
-        self._parse_hostvar_dir(inventory_path)
 
     def _parse_hosts_inventory(self, inventory_path):
         """
@@ -80,13 +108,18 @@ class Ansible(object):
         """
         hosts_contents = []
         if os.path.isdir(inventory_path):
+            self.log.debug("Inventory path {} is a dir. Looking for inventory files in that dir.".format(inventory_path))
             for fname in os.listdir(inventory_path):
+                # Skip .git folder
+                if fname == '.git':
+                    continue
                 path = os.path.join(inventory_path, fname)
                 if os.path.isdir(path):
                     continue
                 with codecs.open(path, 'r', encoding='utf8') as f:
                     hosts_contents += f.readlines()
         else:
+            self.log.debug("Inventory path {} is a file. Reading as inventory.".format(inventory_path))
             with codecs.open(inventory_path, 'r', encoding='utf8') as f:
                 hosts_contents = f.readlines()
 
@@ -97,41 +130,113 @@ class Ansible(object):
 
     def _parse_hostvar_dir(self, inventory_path):
         """
-        Parse host_vars dir, if it exists. This requires the yaml module, which
-        is imported on-demand, since it's not a default module.
+        Parse host_vars dir, if it exists.
         """
-        self.log.debug("Parsing host vars (dir): {0}".format(inventory_path))
-        path = os.path.join(os.path.dirname(inventory_path), 'host_vars')
+        # inventory_path could point to a `hosts` file, or to a dir. So we
+        # construct the location to the `host_vars` differently.
+        if os.path.isdir(inventory_path):
+            path = os.path.join(inventory_path, 'host_vars')
+        else:
+            path = os.path.join(os.path.dirname(inventory_path), 'host_vars')
+
+        self.log.debug("Parsing host vars (dir): {0}".format(path))
         if not os.path.exists(path):
+            self.log.info("No such dir {0}".format(path))
+            return
+
+        for entry in os.listdir(path):
+            # Skip .git folder
+            if entry == '.git':
+                continue
+            full_path = os.path.join(path, entry)
+
+            # file or dir name is the hostname
+            hostname = strip_exts(entry, ('.yml', '.yaml', '.json'))
+
+            if os.path.isfile(full_path):
+                # Parse contents of file as host vars.
+                self._parse_hostvar_file(hostname, full_path)
+            elif os.path.isdir(full_path):
+                # Parse each file in the directory as a file containing
+                # variables for the host.
+                for file_entry in os.listdir(full_path):
+                    p = os.path.join(full_path, file_entry)
+                    self._parse_hostvar_file(hostname, p)
+
+    def _parse_hostvar_file(self, hostname, path):
+        """
+        Parse a host var file and apply it to host `hostname`.
+        """
+        # Check for ansible-vault files, because they're valid yaml for
+        # some reason... (psst, the reason is that yaml sucks)
+        first_line = open(path, 'r').readline()
+        if first_line.startswith('$ANSIBLE_VAULT'):
+            self.log.warning("Skipping encrypted vault file {0}".format(path))
             return
 
         try:
-            import yaml
-        except ImportError:
-            import yaml3 as yaml
+            self.log.debug("Reading host vars from {}".format(path))
+            f = codecs.open(path, 'r', encoding='utf8')
+            invars = ihateyaml.safe_load(f)
+            f.close()
+        except Exception as err:
+            # Just catch everything because yaml...
+            self.log.warning("Yaml couldn't load '{0}'. Skipping. Error was: {1}".format(path, err))
+            return
 
-        flist = []
+        if invars is None:
+            # Empty file or whatever. This is *probably* a side-effect of our
+            # own yaml.SafeLoader implementation ('ihateyaml'), because this
+            # problem didn't exist before.
+            return
+
+        if hostname == "all":
+            # Hostname 'all' is special and applies to all hosts
+            for hostname in self.hosts_all():
+                self.update_host(hostname, {'hostvars': invars}, overwrite=False)
+        else:
+            self.update_host(hostname, {'hostvars': invars}, overwrite=True)
+
+    def _parse_groupvar_dir(self, inventory_path):
+        """
+        Parse group_vars dir, if it exists. Encrypted vault files are skipped.
+        """
+        # inventory_path could point to a `hosts` file, or to a dir. So we
+        # construct the location to the `group_vars` differently.
+        if os.path.isdir(inventory_path):
+            path = os.path.join(inventory_path, 'group_vars')
+        else:
+            path = os.path.join(os.path.dirname(inventory_path), 'group_vars')
+
+        self.log.debug("Parsing group vars (dir): {0}".format(path))
+        if not os.path.exists(path):
+            self.log.info("No such dir {0}".format(path))
+            return
+
         for (dirpath, dirnames, filenames) in os.walk(path):
-            flist.extend(filenames)
-            break
+            for filename in filenames:
+                full_path = os.path.join(dirpath, filename)
 
-        for fname in flist:
-            f_path = os.path.join(path, fname)
+                # filename is the group name
+                groupname = strip_exts(filename, ('.yml', '.yaml', '.json'))
 
-            # Check for ansible-vault files, because they're valid yaml for
-            # some reason... (psst, the reason is that yaml sucks)
-            first_line = open(f_path, 'r').readline()
-            if first_line.startswith('$ANSIBLE_VAULT'):
-                sys.stderr.write("Skipping encrypted vault file {0}\n".format(f_path))
-                continue
+                try:
+                    self.log.debug("Reading group vars from {}".format(full_path))
+                    f = codecs.open(full_path, 'r', encoding='utf8')
+                    invars = ihateyaml.safe_load(f)
+                    f.close()
+                except Exception as err:
+                    # Just catch everything because yaml...
+                    self.log.warning("Yaml couldn't load '{0}' because '{1}'. Skipping".format(full_path, err))
+                    continue  # Go to next file
 
-            try:
-                f = codecs.open(f_path, 'r', encoding='utf8')
-                invars = yaml.safe_load(f)
-                f.close()
-                self.update_host(fname, {'hostvars': invars})
-            except Exception as err:
-                sys.stderr.write("Yaml couldn't load '{0}'. Skipping\n".format(f_path))
+                if groupname == 'all':
+                    # groupname 'all' is special and applies to all hosts.
+                    for hostname in self.hosts_all():
+                        self.update_host(hostname, {'hostvars': invars}, overwrite=False)
+                else:
+                    for hostname in self.hosts_in_group(groupname):
+                        self.update_host(hostname, {'hostvars': invars}, overwrite=False)
 
     def _parse_fact_dir(self, fact_dir, fact_cache=False):
         """
@@ -167,7 +272,7 @@ class Ansible(object):
                 self.update_host(hostname, {'name': hostname})
             except ValueError as e:
                 # Ignore non-JSON files (and bonus errors)
-                sys.stderr.write("Error parsing: %s: %s\n" % (fname, e))
+                self.log.warning("Error parsing: %s: %s" % (fname, e))
 
     def _parse_dyn_inventory(self, script):
         """
@@ -183,7 +288,7 @@ class Ansible(object):
             if proc.returncode != 0:
                 sys.stderr.write("Dynamic inventory script '{0}' returned "
                                  "exitcode {1}\n".format(script,
-                                                        proc.returncode))
+                                                         proc.returncode))
                 for line in stderr:
                     sys.stderr.write(line)
 
@@ -194,13 +299,36 @@ class Ansible(object):
             sys.stderr.write("Exception while executing dynamic inventory script '{0}':\n\n".format(script))
             sys.stderr.write(str(err) + '\n')
 
-    def update_host(self, hostname, key_values):
+    def update_host(self, hostname, key_values, overwrite=True):
         """
         Update a hosts information. This is called by various collectors such
         as the ansible setup module output and the hosts parser to add
         informatio to a host. It does some deep inspection to make sure nested
         information can be updated.
         """
-        host_info = self.hosts.get(hostname, {'name': hostname, 'hostvars': {}})
-        util.deepupdate(host_info, key_values)
+        default_empty_host = {
+            'name': hostname,
+            'hostvars': {},
+        }
+        host_info = self.hosts.get(hostname, default_empty_host)
+        util.deepupdate(host_info, key_values, overwrite=overwrite)
         self.hosts[hostname] = host_info
+
+    def hosts_all(self):
+        """
+        Return a list of all hostnames.
+        """
+        return [hostname for hostname, hostinfo in self.hosts.items()]
+
+    def hosts_in_group(self, groupname):
+        """
+        Return a list of hostnames that are in a group.
+        """
+        result = []
+        for hostname, hostinfo in self.hosts.items():
+            if 'groups' in hostinfo:
+                if groupname in hostinfo['groups']:
+                    result.append(hostname)
+            else:
+                hostinfo['groups'] = [groupname]
+        return result

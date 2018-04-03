@@ -2,7 +2,7 @@ Ansible Configuration Management Database
 =========================================
 
 ![Status: Stable](https://img.shields.io/badge/status-stable-green.svg)
-![Build Status](http://git.electricmonk.nl/job/ansible-cmdb/shield)
+![Build Status](http://build.electricmonk.nl/job/ansible-cmdb/shield)
 ![Activity: Active development](https://img.shields.io/badge/activity-active%20development-green.svg)
 ![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)
 
@@ -40,6 +40,8 @@ Supported output formats / templates:
 
 Installation
 ------------
+
+Ansible-cmdb requires **Python v2.7+ / 3.0+**.
 
 Ansible-cmdb can be installed using `pip` (the Python package manager), with
 stand-alone packages for your distribution or through brew and plain old `make
@@ -131,6 +133,9 @@ The default template is `html_fancy`, which uses jQuery.
       -d, --debug           Show debug output
       -c COLUMNS, --columns=COLUMNS
                             Show only given columns
+      --exclude-cols=EXCLUDE_COLUMNS
+                            Exclude cols from output
+
 
 ### Inventory scanning
 
@@ -151,7 +156,8 @@ For example:
 
     $ ansible-cmdb -i ./hosts out/ > overview.html
 
-If a `host_vars` directory exists at that location, it will also be read.
+If a `host_vars` and / or `group_vars` directory exists at that location, they
+will also be read.
 
 The ''html_fancy'' template uses four extra fields:
 
@@ -315,6 +321,17 @@ For example:
     db03.prod.local         Debian 6.0.10  192.168.58.3   0g   1  
     zoltar.electricmonk.nl  Ubuntu 14.04   194.187.79.11  4g   2 
 
+For interactive templates (`html_fancy` and friends), the `--columns` option
+merely hides the columns by default. It doesn't remote them from the output,
+unlike the `csv` and other static templates. If you want to exclude columns
+from `html_fancy` and friends, use the `--exclude-cols` option. It works the
+same as `--columns`. For example:
+
+    ansible-cmdb -t html_fancy_split \
+                 --exclude-cols mem_usage,swap_usage,disk_usage,physdisk_size \
+                 -i hosts \
+                 facts/
+
 ### Extending
 
 You can specify multiple directories that need to be scanned for facts. This
@@ -419,6 +436,13 @@ fact directories:
 You can add custom facts (not to be confused with 'custom variables') to you
 hosts. These facts will be displayed in the `html_fancy` template by default
 under the 'Custom facts' header.
+
+**Note** that these are not the same as Host local facts. Host local facts are
+facts that Ansible reads from each of your host's `/etc/ansible/facts.d`
+directory. Those are also included in Ansible-cmdb's html_fancy templates, but
+under the "Host local facts" heading. The custom facts explained here are
+manually defined on the host where you run ansible-cmdb, and have little to do
+with Ansible itself.
 
 Let's say you want to add information about installed software to your facts.
 

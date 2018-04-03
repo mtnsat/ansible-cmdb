@@ -1,5 +1,8 @@
 <%
 import sys
+import logging
+
+log = logging.getLogger(__name__)
 
 col_space = 2
 
@@ -7,6 +10,7 @@ cols = [
   {"title": "Name",       "id": "name",       "visible": True, "field": lambda h: h.get('name', '')},
   {"title": "OS",         "id": "os",         "visible": True, "field": lambda h: h['ansible_facts'].get('ansible_distribution', '') + ' ' + h['ansible_facts'].get('ansible_distribution_version', '')},
   {"title": "IP",         "id": "ip",         "visible": True, "field": lambda h: host['ansible_facts'].get('ansible_default_ipv4', {}).get('address', '')},
+  {"title": "Mac",        "id": "mac",        "visible": True, "field": lambda h: host['ansible_facts'].get('ansible_default_ipv4', {}).get('macaddress', '')},
   {"title": "Arch",       "id": "arch",       "visible": True, "field": lambda h: host['ansible_facts'].get('ansible_architecture', 'Unk') + '/' + host['ansible_facts'].get('ansible_userspace_architecture', 'Unk')},
   {"title": "Mem",        "id": "mem",        "visible": True, "field": lambda h: '%0.0fg' % (int(host['ansible_facts'].get('ansible_memtotal_mb', 0)) / 1000.0)},
   {"title": "MemFree",    "id": "memfree",    "visible": True, "field": lambda h: '%0.0fg' % (int(host['ansible_facts'].get('ansible_memfree_mb', 0)) / 1000.0)},
@@ -32,32 +36,32 @@ col_longest = {}
 
 # Init col width to titles' len
 for col in get_cols():
-	col_longest[col['title']] = len(col['title'])
+  col_longest[col['title']] = len(col['title'])
 
 for hostname, host in hosts.items():
-	for col in get_cols():
-		try:
-			field_value = col['field'](host)
-			if len(field_value) > col_longest.get(col['title'], 0):
-				col_longest[col['title']] = len(field_value)
-		except KeyError:
-			pass
+  for col in get_cols():
+    try:
+      field_value = col['field'](host)
+      if len(field_value) > col_longest.get(col['title'], 0):
+        col_longest[col['title']] = len(field_value)
+    except KeyError:
+      pass
 
 # Print out headers
 for col in get_cols():
-	sys.stdout.write(col['title'].ljust(col_longest[col['title']] + col_space))
+  sys.stdout.write(col['title'].ljust(col_longest[col['title']] + col_space))
 sys.stdout.write('\n')
 
 for col in get_cols():
-	sys.stdout.write(u'-' * col_longest[col['title']] + (u' ' * col_space))
+  sys.stdout.write(u'-' * col_longest[col['title']] + (u' ' * col_space))
 sys.stdout.write('\n')
 
 # Print out columns
 for hostname, host in hosts.items():
-	if 'ansible_facts' not in host:
-		sys.stderr.write(u'{0}: No info collected.\n'.format(hostname))
-	else:
-		for col in get_cols():
-			sys.stdout.write(col['field'](host).ljust(col_longest[col['title']]) + (' ' * col_space))
-	sys.stdout.write('\n')
+  if 'ansible_facts' not in host:
+    log.warning(u'{0}: No info collected.'.format(hostname))
+  else:
+    for col in get_cols():
+      sys.stdout.write(col['field'](host).ljust(col_longest[col['title']]) + (' ' * col_space))
+  sys.stdout.write('\n')
 %>
